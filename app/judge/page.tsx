@@ -1,0 +1,66 @@
+"use client"
+
+import { useMemo, useState } from "react"
+
+import { CarouselShell, type Stage } from "@/components/blind-call/CarouselShell"
+import { BlindCallToaster } from "@/components/blind-call/Toast"
+import { JDStageContent } from "@/components/blind-call/JDStageContent"
+import { STAGE_META, isJDStageComplete, type BlindCallStageId, type JDStageState } from "@/lib/stages"
+
+const EMPTY_JD_STATE: JDStageState = {
+  summary: {
+    badgeLabel: "JD",
+    roleTitle: "",
+    team: "",
+    whatYoullDo: "",
+    whatWereLookingFor: "",
+  },
+  archetype: { selected: [], customNote: "" },
+  realAsk: { value: "" },
+}
+
+function PlaceholderStage({ title }: { title: string }) {
+  return (
+    <div className="flex w-full items-center justify-center p-4">
+      <p className="text-sm text-muted-foreground">{title}</p>
+    </div>
+  )
+}
+
+export default function JudgePage() {
+  const [currentStageId, setCurrentStageId] = useState<BlindCallStageId>("jd")
+  const [jd, setJd] = useState<JDStageState>(EMPTY_JD_STATE)
+
+  const stages: Stage[] = useMemo(
+    () =>
+      STAGE_META.map((meta) => {
+        if (meta.id === "jd") {
+          return {
+            ...meta,
+            isComplete: () => isJDStageComplete(jd),
+            content: <JDStageContent jd={jd} onChange={setJd} />,
+          }
+        }
+        return {
+          ...meta,
+          isComplete: () => false,
+          content: <PlaceholderStage title={`${meta.label} — coming soon`} />,
+        }
+      }),
+    [jd]
+  )
+
+  return (
+    <BlindCallToaster>
+      <main className="flex flex-1 items-center justify-center bg-muted p-6">
+        <div className="w-full max-w-md rounded-lg border border-border bg-background p-4">
+          <CarouselShell
+            stages={stages}
+            currentStageId={currentStageId}
+            onStageChange={(id) => setCurrentStageId(id as BlindCallStageId)}
+          />
+        </div>
+      </main>
+    </BlindCallToaster>
+  )
+}
