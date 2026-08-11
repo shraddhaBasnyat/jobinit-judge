@@ -41,8 +41,11 @@ yarn-error.log*
 # vercel
 .vercel
 
-# claude code (local-only settings; skills/config in .claude/ are shared)
+# claude code (local tooling metadata, not app config)
 .claude/settings.local.json
+.claude/skills/
+.mcp.json
+skills-lock.json
 
 # typescript
 *.tsbuildinfo
