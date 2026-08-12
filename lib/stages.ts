@@ -1,3 +1,5 @@
+import type { JDSummary } from "@/lib/mock-data/case"
+
 export type RoleArchetype =
   | "specialist_depth"
   | "scale_operator"
@@ -8,13 +10,7 @@ export type RoleArchetype =
 
 export type JDStageState = {
   // Ticket 2 — read-only, fixed at hardcode time, never changes
-  summary: {
-    badgeLabel: string
-    roleTitle: string
-    team: string
-    whatYoullDo: string
-    whatWereLookingFor: string
-  }
+  summary: JDSummary
   // Ticket 4 — user-editable
   archetype: {
     selected: RoleArchetype[]
