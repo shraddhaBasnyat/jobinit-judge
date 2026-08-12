@@ -26,8 +26,7 @@ This file grows through iteration, not upfront planning. Add a rule here only on
 - `npm run dev` — local dev server
 - `npm run build` — production build
 - `npm run lint` — lint
-
-No test runner configured yet. Don't invent test commands that don't exist.
+- `npm run test:e2e` (or `npx playwright test`) — Playwright test suite in `tests/`; also this repo's only unit-test mechanism. Pure-function tests (e.g. `lib/stages.ts` predicates) are plain `test()` blocks that omit the `page` fixture, run via the same command as the browser-driven specs — there's no separate unit-test runner.
 
 ## Backend
 
@@ -36,7 +35,7 @@ Supabase is a committed part of this project — not yet implemented. Case data 
 ## Workflow
 
 - Work is tracked as GitHub Issues, one ticket per issue. Each ticket contains its own Structural Facts, States, Interaction behavior, Data shape, and Acceptance criteria — read the full ticket before starting.
-- Several components are shared primitives built once and reused across tickets: `TextField`, `Pill`, `NavDot`/`NavDotStrip`, `CarouselShell`. Check whether a primitive already exists before building a new one for the same job.
+- Several components are shared primitives built once and reused across tickets: `TextField`, `StatusPill`/`TogglePill` (tone-driven vs. selection-driven pill variants, split from a shared unexported structural base in `components/blind-call/Pill.tsx` — that base is deliberately not exported, so it can't be rendered directly, unstyled, from elsewhere), `NavDot`/`NavDotStrip`, `CarouselShell`. Check whether a primitive already exists before building a new one for the same job.
 - `CarouselShell` wraps all multi-stage flows. Each stage supplies its own `isComplete(): boolean` — `CarouselShell` never needs to know why a stage is complete, only the result. Don't special-case stage logic inside `CarouselShell` itself.
 - Same seam, one level down: a field's own "is this filled/valid" rule is colocated with the component that owns that field, not collapsed into the stage's aggregate `isComplete()`. A stage-level function (e.g. `isJDStageComplete` in `lib/stages.ts`) should only compose already-computed field-level predicates — deciding *how* they combine (AND/OR/etc.) is the one thing the stage genuinely knows that no single field does. Field predicates without a component home yet (real inputs not built) live in `lib/stages.ts` as an interim spot — move them to their component when it's built.
 
