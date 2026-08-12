@@ -2,24 +2,30 @@
 
 import { isJDStageComplete, type JDStageState } from "@/lib/stages"
 import { Button } from "@/components/ui/button"
+import { HeaderNodeInfo } from "@/components/blind-call/HeaderNodeInfo"
+import { CardContentRow } from "@/components/blind-call/CardContentRow"
 
 export type JDStageContentProps = {
   jd: JDStageState
   onChange: (next: JDStageState) => void
 }
 
-// Ticket 1 only needs enough surface to exercise isJDStageComplete's real
-// AND-logic for the CarouselShell gate. The real badge/team/archetype/
-// real-ask UI is Tickets 2-4's job, not this ticket's.
+// Ticket 2 built the real badge/team content below. The archetype/real-ask
+// toggle buttons are still Ticket 3/4's placeholder surface.
 export function JDStageContent({ jd, onChange }: JDStageContentProps) {
   const hasArchetype = jd.archetype.selected.length > 0
   const hasRealAsk = jd.realAsk.value.trim().length > 0
 
   return (
     <div className="flex w-full flex-col gap-4 p-4">
-      <p className="text-sm text-muted-foreground">
-        JD stage placeholder (Tickets 2–4 build the real content)
-      </p>
+      <HeaderNodeInfo badgeLabel={jd.summary.badgeLabel} label={jd.summary.roleTitle} />
+      <CardContentRow variant="text" label="THE TEAM" content={jd.summary.team} />
+      <CardContentRow variant="text" label="WHAT YOU'LL DO" content={jd.summary.whatYoullDo} />
+      <CardContentRow
+        variant="text"
+        label="WHAT WE'RE LOOKING FOR"
+        content={jd.summary.whatWereLookingFor}
+      />
       <Button
         type="button"
         variant="outline"

@@ -6,15 +6,10 @@ import { CarouselShell, type Stage } from "@/components/blind-call/CarouselShell
 import { BlindCallToaster } from "@/components/blind-call/Toast"
 import { JDStageContent } from "@/components/blind-call/JDStageContent"
 import { STAGE_META, isJDStageComplete, type BlindCallStageId, type JDStageState } from "@/lib/stages"
+import { MOCK_CASE } from "@/lib/mock-data/case"
 
-const EMPTY_JD_STATE: JDStageState = {
-  summary: {
-    badgeLabel: "JD",
-    roleTitle: "",
-    team: "",
-    whatYoullDo: "",
-    whatWereLookingFor: "",
-  },
+const INITIAL_JD_STATE: JDStageState = {
+  summary: MOCK_CASE.jd,
   archetype: { selected: [], customNote: "" },
   realAsk: { value: "" },
 }
@@ -29,7 +24,7 @@ function PlaceholderStage({ title }: { title: string }) {
 
 export default function JudgePage() {
   const [currentStageId, setCurrentStageId] = useState<BlindCallStageId>("jd")
-  const [jd, setJd] = useState<JDStageState>(EMPTY_JD_STATE)
+  const [jd, setJd] = useState<JDStageState>(INITIAL_JD_STATE)
 
   const stages: Stage[] = useMemo(
     () =>
