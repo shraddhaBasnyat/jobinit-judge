@@ -1,0 +1,160 @@
+"use client"
+
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import { animate, motion, useMotionValue, type PanInfo } from "motion/react"
+import { Toast as ToastPrimitive } from "@base-ui/react/toast"
+
+import { NavDotStrip } from "@/components/blind-call/NavDotStrip"
+import { CardPrevNext } from "@/components/blind-call/CardPrevNext"
+import { BLOCKED_STAGE_TOAST_ID, TOAST_TIMEOUT_MS } from "@/components/blind-call/Toast"
+
+export type Stage = {
+  id: string
+  label: string
+  isComplete: () => boolean
+  content: ReactNode
+}
+
+export type CarouselShellProps = {
+  stages: Stage[]
+  currentStageId: string
+  onStageChange?: (id: string) => void
+}
+
+const PEEK_THRESHOLD_PX = 56
+const COMMIT_VELOCITY = 500
+const REST_SPRING = { type: "spring", stiffness: 300, damping: 32 } as const
+const REJECT_SPRING = { type: "spring", stiffness: 500, damping: 40 } as const
+
+export function CarouselShell({ stages, currentStageId, onStageChange }: CarouselShellProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [cardWidth, setCardWidth] = useState(0)
+  const x = useMotionValue(0)
+  const toastManager = ToastPrimitive.useToastManager()
+
+  const currentIndex = stages.findIndex((s) => s.id === currentStageId)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (entry) setCardWidth(entry.contentRect.width)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!cardWidth) return
+    animate(x, -currentIndex * cardWidth, REST_SPRING)
+  }, [currentIndex, cardWidth, x])
+
+  const settle = useCallback(() => {
+    animate(x, -currentIndex * cardWidth, REJECT_SPRING)
+  }, [x, currentIndex, cardWidth])
+
+  // Only one blocked-stage toast may be visible at a time: an existing id
+  // would have its dismiss timer refreshed by toastManager.add(), so a
+  // repeat attempt while one is already showing is skipped entirely.
+  const fireBlockedToast = useCallback(() => {
+    const alreadyShowing = toastManager.toasts.some((t) => t.id === BLOCKED_STAGE_TOAST_ID)
+    if (alreadyShowing) return
+    toastManager.add({
+      id: BLOCKED_STAGE_TOAST_ID,
+      title: "A few more answers to go",
+      timeout: TOAST_TIMEOUT_MS,
+    })
+  }, [toastManager])
+
+  const handleDragEnd = useCallback(
+    (_event: PointerEvent | MouseEvent | TouchEvent, info: PanInfo) => {
+      const offset = info.offset.x
+      const velocity = info.velocity.x
+      const pastThreshold =
+        Math.abs(offset) > PEEK_THRESHOLD_PX || Math.abs(velocity) > COMMIT_VELOCITY
+
+      if (!pastThreshold) {
+        settle()
+        return
+      }
+
+      if (offset < 0) {
+        // Dragged left = forward, gated by the current stage's isComplete().
+        const next = stages[currentIndex + 1]
+        if (!next) {
+          settle()
+          return
+        }
+        if (stages[currentIndex].isComplete()) {
+          onStageChange?.(next.id)
+        } else {
+          settle()
+          fireBlockedToast()
+        }
+      } else {
+        // Dragged right = backward, always unconditional — never gated.
+        const prev = stages[currentIndex - 1]
+        if (!prev) {
+          settle()
+          return
+        }
+        onStageChange?.(prev.id)
+      }
+    },
+    [stages, currentIndex, onStageChange, settle, fireBlockedToast]
+  )
+
+  const commitForward = useCallback(() => {
+    const next = stages[currentIndex + 1]
+    if (next) onStageChange?.(next.id)
+  }, [stages, currentIndex, onStageChange])
+
+  const commitBackward = useCallback(() => {
+    const prev = stages[currentIndex - 1]
+    if (prev) onStageChange?.(prev.id)
+  }, [stages, currentIndex, onStageChange])
+
+  const current = stages[currentIndex]
+  const nextDisabled = !current?.isComplete()
+  const prevDisabled = currentIndex === 0
+
+  return (
+    <div className="flex w-full flex-col gap-4">
+      <NavDotStrip stages={stages} currentStageId={currentStageId} />
+      <div ref={containerRef} className="w-full overflow-hidden">
+        <motion.div
+          data-testid="carousel-track"
+          className="flex flex-row"
+          style={{ x }}
+          drag="x"
+          dragConstraints={{ left: -cardWidth * 1.2, right: cardWidth * 1.2 }}
+          dragMomentum={false}
+          onDragEnd={handleDragEnd}
+        >
+          {stages.map((stage) => {
+            const isActive = stage.id === currentStageId
+            return (
+              <div
+                key={stage.id}
+                data-blind-call-stage={stage.id}
+                data-active={isActive || undefined}
+                aria-hidden={!isActive}
+                inert={!isActive}
+                className="w-full shrink-0"
+              >
+                {stage.content}
+              </div>
+            )
+          })}
+        </motion.div>
+      </div>
+      <CardPrevNext
+        onPrev={commitBackward}
+        onNext={commitForward}
+        prevDisabled={prevDisabled}
+        nextDisabled={nextDisabled}
+      />
+    </div>
+  )
+}

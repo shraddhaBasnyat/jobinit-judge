@@ -38,6 +38,7 @@ Supabase is a committed part of this project — not yet implemented. Case data 
 - Work is tracked as GitHub Issues, one ticket per issue. Each ticket contains its own Structural Facts, States, Interaction behavior, Data shape, and Acceptance criteria — read the full ticket before starting.
 - Several components are shared primitives built once and reused across tickets: `TextField`, `Pill`, `NavDot`/`NavDotStrip`, `CarouselShell`. Check whether a primitive already exists before building a new one for the same job.
 - `CarouselShell` wraps all multi-stage flows. Each stage supplies its own `isComplete(): boolean` — `CarouselShell` never needs to know why a stage is complete, only the result. Don't special-case stage logic inside `CarouselShell` itself.
+- Same seam, one level down: a field's own "is this filled/valid" rule is colocated with the component that owns that field, not collapsed into the stage's aggregate `isComplete()`. A stage-level function (e.g. `isJDStageComplete` in `lib/stages.ts`) should only compose already-computed field-level predicates — deciding *how* they combine (AND/OR/etc.) is the one thing the stage genuinely knows that no single field does. Field predicates without a component home yet (real inputs not built) live in `lib/stages.ts` as an interim spot — move them to their component when it's built.
 
 ## Boundaries
 
