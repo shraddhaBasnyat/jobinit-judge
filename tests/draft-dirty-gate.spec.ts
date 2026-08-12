@@ -16,9 +16,10 @@ test.describe("Draft-dirty forward-nav gate", () => {
     await expect(next).toBeDisabled()
     await expect(next).toHaveAttribute("aria-disabled", "true")
 
-    // isJDStageComplete itself is unaffected by draft dirtiness — only the
-    // stage-level "can advance" signal is. The two are deliberately distinct.
-    await expect(page.getByTestId("jd-stage-complete-status")).toHaveText("Complete")
+    // isJDStageComplete itself staying true here (unaffected by draft
+    // dirtiness) has no remaining UI hook to assert against directly, now
+    // that jd-stage-complete-status is gone — see tests/stages.spec.ts for
+    // a direct unit test of that AND composition instead.
 
     await page.getByTestId("input-with-button-add").click()
     await expect(next).toBeEnabled()

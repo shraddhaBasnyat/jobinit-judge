@@ -56,27 +56,27 @@ test.describe("InputWithButton", () => {
     await page.goto("/judge")
     const field = page.getByTestId("input-with-button-field")
     const addButton = page.getByTestId("input-with-button-add")
-    const status = page.getByTestId("jd-stage-complete-status")
+    const next = page.getByRole("button", { name: "Next stage" })
 
     await page.getByTestId("jd-toggle-archetype").click()
-    await expect(status).toHaveText("Incomplete")
+    await expect(next).toBeDisabled()
 
     await field.fill("The real ask")
-    await expect(status).toHaveText("Incomplete")
+    await expect(next).toBeDisabled()
     await addButton.click()
 
-    await expect(status).toHaveText("Complete")
+    await expect(next).toBeEnabled()
     await expect(field).toHaveValue("The real ask")
   })
 
   test("typing without tapping Add does not flip stage completion", async ({ page }) => {
     await page.goto("/judge")
     const field = page.getByTestId("input-with-button-field")
-    const status = page.getByTestId("jd-stage-complete-status")
+    const next = page.getByRole("button", { name: "Next stage" })
 
     await page.getByTestId("jd-toggle-archetype").click()
     await field.fill("Draft text sitting in the field")
-    await expect(status).toHaveText("Incomplete")
+    await expect(next).toBeDisabled()
   })
 
   test("Add re-disables immediately after a successful commit, since the draft still matches", async ({

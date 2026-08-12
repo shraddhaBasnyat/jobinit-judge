@@ -1,6 +1,6 @@
 "use client"
 
-import { isJDStageComplete, type JDStageState } from "@/lib/stages"
+import type { JDStageState } from "@/lib/stages"
 import { Button } from "@/components/ui/button"
 import { HeaderNodeInfo } from "@/components/blind-call/HeaderNodeInfo"
 import { CardContentRow } from "@/components/blind-call/CardContentRow"
@@ -55,9 +55,6 @@ export function JDStageContent({
         onDraftDirtyChange={onRealAskDraftDirtyChange}
         placeholder="Add the job description's real ask"
       />
-      <p data-testid="jd-stage-complete-status" className="text-sm font-medium text-foreground">
-        {isJDStageComplete(jd) ? "Complete" : "Incomplete"}
-      </p>
     </div>
   )
 }
