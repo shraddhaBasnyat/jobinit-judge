@@ -39,4 +39,35 @@ test.describe("Draft-dirty forward-nav gate", () => {
     ).toBeVisible()
     await expect(page.getByText("A few more answers to go")).toHaveCount(0)
   })
+
+  test("Next disables when jd is complete but the archetype note draft is unsaved, re-enables once blurred", async ({
+    page,
+  }) => {
+    await page.goto("/judge")
+    await forceJDComplete(page)
+
+    const next = page.getByRole("button", { name: "Next stage" })
+    await expect(next).toBeEnabled()
+
+    await page.getByTestId("multi-select-with-note-note-field").fill("An unsaved note edit")
+    await expect(next).toBeDisabled()
+    await expect(next).toHaveAttribute("aria-disabled", "true")
+
+    await page.getByTestId("multi-select-with-note-note-field").blur()
+    await expect(next).toBeEnabled()
+  })
+
+  // No drag-based "blocked toast" test for the note field, unlike realAsk
+  // above — verified empirically that neither mouse-drag approach can reach
+  // that state: starting the drag from the carousel track's center (like
+  // dragCarousel) blurs-and-commits the still-focused note field before the
+  // drag is ever evaluated (mousedown on any other element blurs it, and
+  // this field commits on blur); starting the drag from the field itself
+  // gets captured entirely by the browser's native text-selection drag
+  // instead of ever reaching CarouselShell's pan gesture (confirmed via the
+  // track's transform never changing and the field's full text ending up
+  // selected). realAsk doesn't have this problem because it only commits on
+  // an explicit Add click, so a drag from the track's center leaves it
+  // genuinely dirty. The dirty-gate logic itself and jdStageBlockedMessage's
+  // note-specific copy are still fully covered — see tests/stages.spec.ts.
 })

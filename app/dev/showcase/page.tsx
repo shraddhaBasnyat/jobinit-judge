@@ -1,4 +1,4 @@
-import { Pill } from "@/components/blind-call/Pill"
+import { StatusPill, TogglePill } from "@/components/blind-call/Pill"
 import { CardContentRow } from "@/components/blind-call/CardContentRow"
 
 // Dev/test-only route — not part of the real judge flow. The /judge page
@@ -13,10 +13,14 @@ export default function DevShowcasePage() {
   return (
     <div className="flex w-full max-w-md flex-col gap-6 p-6">
       <div className="flex flex-col items-start gap-2" data-testid="pill-tone-showcase">
-        <Pill tone="default" label="Specialist Depth" />
-        <Pill tone="positive" label="Specialist Depth" />
-        <Pill tone="neutral" label="Specialist Depth" />
-        <Pill tone="negative" label="Specialist Depth" />
+        <StatusPill tone="default" label="Specialist Depth" />
+        <StatusPill tone="positive" label="Specialist Depth" />
+        <StatusPill tone="neutral" label="Specialist Depth" />
+        <StatusPill tone="negative" label="Specialist Depth" />
+      </div>
+      <div className="flex flex-col items-start gap-2" data-testid="toggle-pill-showcase">
+        <TogglePill selected={false} label="Specialist Depth" />
+        <TogglePill selected={true} label="Specialist Depth" />
       </div>
       <div data-testid="long-content-showcase">
         <CardContentRow variant="text" label="LONG CONTENT" content={LONG_CONTENT} />
