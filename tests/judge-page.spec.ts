@@ -21,7 +21,7 @@ test.describe("Judge page", () => {
     const next = page.getByRole("button", { name: "Next stage" })
     await expect(next).toBeDisabled()
 
-    await page.getByTestId("jd-toggle-archetype").click()
+    await page.getByTestId("multi-select-with-note-pill-Specialist Depth").click()
     await expect(next).toBeDisabled()
 
     await page.getByTestId("input-with-button-field").fill("The real ask")

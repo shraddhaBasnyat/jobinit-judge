@@ -32,6 +32,7 @@ export default function JudgePage() {
   const [currentStageId, setCurrentStageId] = useState<BlindCallStageId>("jd")
   const [jd, setJd] = useState<JDStageState>(INITIAL_JD_STATE)
   const [hasDirtyRealAskDraft, setHasDirtyRealAskDraft] = useState(false)
+  const [hasDirtyNoteDraft, setHasDirtyNoteDraft] = useState(false)
 
   const stages: Stage[] = useMemo(
     () =>
@@ -39,13 +40,14 @@ export default function JudgePage() {
         if (meta.id === "jd") {
           return {
             ...meta,
-            isComplete: () => canAdvanceJDStage(jd, hasDirtyRealAskDraft),
-            blockedMessage: () => jdStageBlockedMessage(hasDirtyRealAskDraft),
+            isComplete: () => canAdvanceJDStage(jd, hasDirtyRealAskDraft, hasDirtyNoteDraft),
+            blockedMessage: () => jdStageBlockedMessage(hasDirtyRealAskDraft, hasDirtyNoteDraft),
             content: (
               <JDStageContent
                 jd={jd}
                 onChange={setJd}
                 onRealAskDraftDirtyChange={setHasDirtyRealAskDraft}
+                onNoteDraftDirtyChange={setHasDirtyNoteDraft}
               />
             ),
           }
@@ -56,7 +58,7 @@ export default function JudgePage() {
           content: <PlaceholderStage title={`${meta.label} — coming soon`} />,
         }
       }),
-    [jd, hasDirtyRealAskDraft]
+    [jd, hasDirtyRealAskDraft, hasDirtyNoteDraft]
   )
 
   return (

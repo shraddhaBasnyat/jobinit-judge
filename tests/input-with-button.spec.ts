@@ -58,7 +58,7 @@ test.describe("InputWithButton", () => {
     const addButton = page.getByTestId("input-with-button-add")
     const next = page.getByRole("button", { name: "Next stage" })
 
-    await page.getByTestId("jd-toggle-archetype").click()
+    await page.getByTestId("multi-select-with-note-pill-Specialist Depth").click()
     await expect(next).toBeDisabled()
 
     await field.fill("The real ask")
@@ -74,7 +74,7 @@ test.describe("InputWithButton", () => {
     const field = page.getByTestId("input-with-button-field")
     const next = page.getByRole("button", { name: "Next stage" })
 
-    await page.getByTestId("jd-toggle-archetype").click()
+    await page.getByTestId("multi-select-with-note-pill-Specialist Depth").click()
     await field.fill("Draft text sitting in the field")
     await expect(next).toBeDisabled()
   })
