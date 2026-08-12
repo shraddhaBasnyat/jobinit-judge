@@ -18,13 +18,14 @@ test.describe("Judge page", () => {
 
   test("jd completeness requires both archetype AND real-ask", async ({ page }) => {
     await page.goto("/judge")
-    const status = page.getByTestId("jd-stage-complete-status")
-    await expect(status).toHaveText("Incomplete")
+    const next = page.getByRole("button", { name: "Next stage" })
+    await expect(next).toBeDisabled()
 
     await page.getByTestId("jd-toggle-archetype").click()
-    await expect(status).toHaveText("Incomplete")
+    await expect(next).toBeDisabled()
 
-    await page.getByTestId("jd-toggle-real-ask").click()
-    await expect(status).toHaveText("Complete")
+    await page.getByTestId("input-with-button-field").fill("The real ask")
+    await page.getByTestId("input-with-button-add").click()
+    await expect(next).toBeEnabled()
   })
 })
