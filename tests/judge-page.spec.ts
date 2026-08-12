@@ -24,7 +24,8 @@ test.describe("Judge page", () => {
     await page.getByTestId("jd-toggle-archetype").click()
     await expect(status).toHaveText("Incomplete")
 
-    await page.getByTestId("jd-toggle-real-ask").click()
+    await page.getByTestId("input-with-button-field").fill("The real ask")
+    await page.getByTestId("input-with-button-add").click()
     await expect(status).toHaveText("Complete")
   })
 })

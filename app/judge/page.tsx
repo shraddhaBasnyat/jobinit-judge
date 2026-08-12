@@ -5,7 +5,13 @@ import { useMemo, useState } from "react"
 import { CarouselShell, type Stage } from "@/components/blind-call/CarouselShell"
 import { BlindCallToaster } from "@/components/blind-call/Toast"
 import { JDStageContent } from "@/components/blind-call/JDStageContent"
-import { STAGE_META, isJDStageComplete, type BlindCallStageId, type JDStageState } from "@/lib/stages"
+import {
+  STAGE_META,
+  canAdvanceJDStage,
+  jdStageBlockedMessage,
+  type BlindCallStageId,
+  type JDStageState,
+} from "@/lib/stages"
 import { MOCK_CASE } from "@/lib/mock-data/case"
 
 const INITIAL_JD_STATE: JDStageState = {
@@ -25,6 +31,7 @@ function PlaceholderStage({ title }: { title: string }) {
 export default function JudgePage() {
   const [currentStageId, setCurrentStageId] = useState<BlindCallStageId>("jd")
   const [jd, setJd] = useState<JDStageState>(INITIAL_JD_STATE)
+  const [hasDirtyRealAskDraft, setHasDirtyRealAskDraft] = useState(false)
 
   const stages: Stage[] = useMemo(
     () =>
@@ -32,8 +39,15 @@ export default function JudgePage() {
         if (meta.id === "jd") {
           return {
             ...meta,
-            isComplete: () => isJDStageComplete(jd),
-            content: <JDStageContent jd={jd} onChange={setJd} />,
+            isComplete: () => canAdvanceJDStage(jd, hasDirtyRealAskDraft),
+            blockedMessage: () => jdStageBlockedMessage(hasDirtyRealAskDraft),
+            content: (
+              <JDStageContent
+                jd={jd}
+                onChange={setJd}
+                onRealAskDraftDirtyChange={setHasDirtyRealAskDraft}
+              />
+            ),
           }
         }
         return {
@@ -42,7 +56,7 @@ export default function JudgePage() {
           content: <PlaceholderStage title={`${meta.label} — coming soon`} />,
         }
       }),
-    [jd]
+    [jd, hasDirtyRealAskDraft]
   )
 
   return (

@@ -32,5 +32,6 @@ export async function resolveColorVar(page: Page, cssVar: string) {
 
 export async function forceJDComplete(page: Page) {
   await page.getByTestId("jd-toggle-archetype").click()
-  await page.getByTestId("jd-toggle-real-ask").click()
+  await page.getByTestId("input-with-button-field").fill("Placeholder real ask")
+  await page.getByTestId("input-with-button-add").click()
 }

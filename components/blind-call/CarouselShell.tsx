@@ -12,6 +12,11 @@ export type Stage = {
   id: string
   label: string
   isComplete: () => boolean
+  // Optional stage-specific copy for the blocked-forward-nav toast; falls
+  // back to the generic default below when omitted or returning undefined.
+  // Keeps CarouselShell opaque to *why* a stage is blocked — it only ever
+  // asks for a string, same as it only ever asks isComplete() for a bool.
+  blockedMessage?: () => string | undefined
   content: ReactNode
 }
 
@@ -60,12 +65,13 @@ export function CarouselShell({ stages, currentStageId, onStageChange }: Carouse
   const fireBlockedToast = useCallback(() => {
     const alreadyShowing = toastManager.toasts.some((t) => t.id === BLOCKED_STAGE_TOAST_ID)
     if (alreadyShowing) return
+    const title = stages[currentIndex]?.blockedMessage?.() ?? "A few more answers to go"
     toastManager.add({
       id: BLOCKED_STAGE_TOAST_ID,
-      title: "A few more answers to go",
+      title,
       timeout: TOAST_TIMEOUT_MS,
     })
-  }, [toastManager])
+  }, [toastManager, stages, currentIndex])
 
   const handleDragEnd = useCallback(
     (_event: PointerEvent | MouseEvent | TouchEvent, info: PanInfo) => {
