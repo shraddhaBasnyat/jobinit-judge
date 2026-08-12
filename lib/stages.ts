@@ -35,13 +35,22 @@ export type BlindCallState = {
   // these; render as placeholder stage content until they have real tickets
 }
 
-// The single isComplete() CarouselShell calls for the "jd" stage —
-// user must satisfy BOTH archetype AND real-ask, not either/or.
+// Field-level rules, colocated here only until Tickets 3-4 build the real
+// MultiSelectWithNote / real-ask input components — move each function to
+// live next to its component then, keeping this file as the composer only.
+export function isArchetypeFilled(archetype: JDStageState["archetype"]): boolean {
+  return archetype.selected.length > 0 || Boolean(archetype.customNote?.trim())
+}
+
+export function isRealAskFilled(realAsk: JDStageState["realAsk"]): boolean {
+  return realAsk.value.trim().length > 0
+}
+
+// The single isComplete() CarouselShell calls for the "jd" stage — composes
+// the field-level rules above. This is the only place that knows both are
+// required (AND, not either/or); no individual field predicate should.
 export function isJDStageComplete(jd: JDStageState): boolean {
-  const archetypeDone =
-    jd.archetype.selected.length > 0 || Boolean(jd.archetype.customNote?.trim())
-  const realAskDone = jd.realAsk.value.trim().length > 0
-  return archetypeDone && realAskDone
+  return isArchetypeFilled(jd.archetype) && isRealAskFilled(jd.realAsk)
 }
 
 export const STAGE_META: { id: BlindCallStageId; label: string }[] = [
