@@ -13,3 +13,5 @@ export {
   type BlindCallStageId,
   type BlindCallState,
 } from "@/lib/stages/blind-call"
+
+export { isResumeStageComplete, type ResumeStageState } from "@/lib/stages/resume"

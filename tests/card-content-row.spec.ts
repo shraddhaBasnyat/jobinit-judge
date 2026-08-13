@@ -5,7 +5,10 @@ import { resolveColorVar } from "./helpers"
 test.describe("CardContentRow", () => {
   test("renders three rows in order with correct labels, content, and styling", async ({ page }) => {
     await page.goto("/judge")
-    const rows = page.getByTestId("card-content-row")
+    // Scoped to the jd panel — CarouselShell mounts all stage panels in the
+    // DOM at once (resume also renders 3 real CardContentRows as of #10), so
+    // an unscoped page.getByTestId("card-content-row") is now ambiguous.
+    const rows = page.locator('[data-blind-call-stage="jd"]').getByTestId("card-content-row")
     await expect(rows).toHaveCount(3)
 
     const expected = [
