@@ -5,7 +5,10 @@ import { resolveColorVar } from "./helpers"
 test.describe("HeaderNodeInfo", () => {
   test("renders a real default-tone Pill badge plus the role title", async ({ page }) => {
     await page.goto("/judge")
-    const header = page.getByTestId("header-node-info")
+    // Scoped to the jd panel — CarouselShell mounts all stage panels in the
+    // DOM at once (resume also renders a real HeaderNodeInfo as of #10), so
+    // an unscoped page.getByTestId("header-node-info") is now ambiguous.
+    const header = page.locator('[data-blind-call-stage="jd"]').getByTestId("header-node-info")
 
     const badge = header.getByTestId("pill")
     await expect(badge).toHaveAttribute("data-pill-tone", "default")

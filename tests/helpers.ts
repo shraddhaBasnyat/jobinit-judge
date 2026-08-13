@@ -35,3 +35,14 @@ export async function forceJDComplete(page: Page) {
   await page.getByTestId("input-with-button-field").fill("Placeholder real ask")
   await page.getByTestId("input-with-button-add").click()
 }
+
+const MOCK_RESUME_STATEMENT_IDS = ["current-jobinit", "image-selection-engine", "swe-to-staff"]
+
+export async function forceResumeComplete(page: Page) {
+  for (const id of MOCK_RESUME_STATEMENT_IDS) {
+    await page
+      .getByTestId(`statement-assess-${id}`)
+      .getByTestId("assess-option-radio-backedUp")
+      .click()
+  }
+}

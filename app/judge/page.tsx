@@ -5,12 +5,15 @@ import { useMemo, useState } from "react"
 import { CarouselShell, type Stage } from "@/components/blind-call/CarouselShell"
 import { BlindCallToaster } from "@/components/blind-call/Toast"
 import { JDStageContent } from "@/components/blind-call/JDStageContent"
+import { ResumeStageContent } from "@/components/blind-call/ResumeStageContent"
 import {
   STAGE_META,
   canAdvanceJDStage,
   jdStageBlockedMessage,
+  isResumeStageComplete,
   type BlindCallStageId,
   type JDStageState,
+  type ResumeStageState,
 } from "@/lib/stages"
 import { MOCK_CASE } from "@/lib/mock-data/case"
 
@@ -18,6 +21,12 @@ const INITIAL_JD_STATE: JDStageState = {
   summary: MOCK_CASE.jd,
   archetype: { selected: [], customNote: "" },
   realAsk: { value: "" },
+}
+
+const INITIAL_RESUME_STATE: ResumeStageState = {
+  summary: MOCK_CASE.resume.summary,
+  statements: MOCK_CASE.resume.statements,
+  values: {},
 }
 
 function PlaceholderStage({ title }: { title: string }) {
@@ -33,6 +42,7 @@ export default function JudgePage() {
   const [jd, setJd] = useState<JDStageState>(INITIAL_JD_STATE)
   const [hasDirtyRealAskDraft, setHasDirtyRealAskDraft] = useState(false)
   const [hasDirtyNoteDraft, setHasDirtyNoteDraft] = useState(false)
+  const [resume, setResume] = useState<ResumeStageState>(INITIAL_RESUME_STATE)
 
   const stages: Stage[] = useMemo(
     () =>
@@ -52,13 +62,20 @@ export default function JudgePage() {
             ),
           }
         }
+        if (meta.id === "resume") {
+          return {
+            ...meta,
+            isComplete: () => isResumeStageComplete(resume),
+            content: <ResumeStageContent resume={resume} onChange={setResume} />,
+          }
+        }
         return {
           ...meta,
           isComplete: () => false,
           content: <PlaceholderStage title={`${meta.label} — coming soon`} />,
         }
       }),
-    [jd, hasDirtyRealAskDraft, hasDirtyNoteDraft]
+    [jd, hasDirtyRealAskDraft, hasDirtyNoteDraft, resume]
   )
 
   return (
