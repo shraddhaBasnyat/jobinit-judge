@@ -50,15 +50,6 @@ export type JDStageState = {
   realAsk: InputWithButtonValue
 }
 
-export type BlindCallStageId = "jd" | "resume" | "fit" | "reveal" | "revise" | "done"
-
-export type BlindCallState = {
-  currentStageId: BlindCallStageId
-  jd: JDStageState
-  // resume / fit / reveal / revise / done — no fields yet, no ticket builds
-  // these; render as placeholder stage content until they have real tickets
-}
-
 // The single isComplete() CarouselShell calls for the "jd" stage — composes
 // the field-level rules above. This is the only place that knows both are
 // required (AND, not either/or); no individual field predicate should.
@@ -103,12 +94,3 @@ export function jdStageBlockedMessage(
   }
   return undefined
 }
-
-export const STAGE_META: { id: BlindCallStageId; label: string }[] = [
-  { id: "jd", label: "JD" },
-  { id: "resume", label: "Resume" },
-  { id: "fit", label: "Fit" },
-  { id: "reveal", label: "Reveal" },
-  { id: "revise", label: "Revise" },
-  { id: "done", label: "Done" },
-]

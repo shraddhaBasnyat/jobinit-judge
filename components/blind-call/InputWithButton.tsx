@@ -58,7 +58,7 @@ export function InputWithButton({
 
   return (
     <div className="flex flex-col gap-1" data-testid="input-with-button">
-      {title ? <p className="text-sm leading-5 font-semibold text-foreground">{title}</p> : null}
+      {title ? <p className="text-prompt-question">{title}</p> : null}
       <div className="flex items-center justify-end gap-1">
         <TextField
           value={draft}

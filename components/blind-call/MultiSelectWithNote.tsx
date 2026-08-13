@@ -35,7 +35,7 @@ export function MultiSelectWithNote({
 }: MultiSelectWithNoteProps) {
   return (
     <div className="flex flex-col gap-3" data-testid="multi-select-with-note">
-      <p className="text-sm leading-5 font-bold text-primary">{title}</p>
+      <p className="text-prompt-question">{title}</p>
       <p className="text-[11px] leading-5 font-semibold text-muted-foreground">
         {instructionLabel}
       </p>

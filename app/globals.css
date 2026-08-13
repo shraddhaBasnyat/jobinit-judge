@@ -97,3 +97,9 @@
     @apply font-sans;
   }
 }
+
+@layer components {
+  .text-prompt-question {
+    @apply text-sm font-bold text-primary;
+  }
+}
