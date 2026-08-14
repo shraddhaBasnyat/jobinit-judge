@@ -20,3 +20,10 @@ export {
   resumeStageBlockedMessage,
   type ResumeStageState,
 } from "@/lib/stages/resume"
+
+export {
+  isFitStageComplete,
+  FIT_VERDICT_OPTIONS,
+  type FitStageState,
+  type FitVerdict,
+} from "@/lib/stages/fit"

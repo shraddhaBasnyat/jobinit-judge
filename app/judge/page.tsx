@@ -6,15 +6,18 @@ import { CarouselShell, type Stage } from "@/components/blind-call/CarouselShell
 import { BlindCallToaster } from "@/components/blind-call/Toast"
 import { JDStageContent } from "@/components/blind-call/JDStageContent"
 import { ResumeStageContent } from "@/components/blind-call/ResumeStageContent"
+import { FitStageContent } from "@/components/blind-call/FitStageContent"
 import {
   STAGE_META,
   canAdvanceJDStage,
   jdStageBlockedMessage,
   canAdvanceResumeStage,
   resumeStageBlockedMessage,
+  isFitStageComplete,
   type BlindCallStageId,
   type JDStageState,
   type ResumeStageState,
+  type FitStageState,
 } from "@/lib/stages"
 import { MOCK_CASE } from "@/lib/mock-data/case"
 
@@ -29,6 +32,10 @@ const INITIAL_RESUME_STATE: ResumeStageState = {
   statements: MOCK_CASE.resume.statements,
   values: {},
   archetype: { selected: [], customNote: "" },
+}
+
+const INITIAL_FIT_STATE: FitStageState = {
+  verdict: {},
 }
 
 function PlaceholderStage({ title }: { title: string }) {
@@ -46,6 +53,7 @@ export default function JudgePage() {
   const [hasDirtyNoteDraft, setHasDirtyNoteDraft] = useState(false)
   const [resume, setResume] = useState<ResumeStageState>(INITIAL_RESUME_STATE)
   const [hasDirtyResumeNoteDraft, setHasDirtyResumeNoteDraft] = useState(false)
+  const [fit, setFit] = useState<FitStageState>(INITIAL_FIT_STATE)
 
   const stages: Stage[] = useMemo(
     () =>
@@ -79,13 +87,20 @@ export default function JudgePage() {
             ),
           }
         }
+        if (meta.id === "fit") {
+          return {
+            ...meta,
+            isComplete: () => isFitStageComplete(fit),
+            content: <FitStageContent fit={fit} onChange={setFit} />,
+          }
+        }
         return {
           ...meta,
           isComplete: () => false,
           content: <PlaceholderStage title={`${meta.label} — coming soon`} />,
         }
       }),
-    [jd, hasDirtyRealAskDraft, hasDirtyNoteDraft, resume, hasDirtyResumeNoteDraft]
+    [jd, hasDirtyRealAskDraft, hasDirtyNoteDraft, resume, hasDirtyResumeNoteDraft, fit]
   )
 
   return (

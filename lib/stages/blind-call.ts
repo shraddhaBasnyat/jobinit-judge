@@ -1,5 +1,6 @@
 import type { JDStageState } from "@/lib/stages/jd"
 import type { ResumeStageState } from "@/lib/stages/resume"
+import type { FitStageState } from "@/lib/stages/fit"
 
 export type RoleArchetype =
   | "specialist_depth"
@@ -40,7 +41,8 @@ export type BlindCallState = {
   currentStageId: BlindCallStageId
   jd: JDStageState
   resume: ResumeStageState
-  // fit / reveal / revise / done — no fields yet, no ticket builds these;
+  fit: FitStageState
+  // reveal / revise / done — no fields yet, no ticket builds these;
   // render as placeholder stage content until they have real tickets
 }
 
