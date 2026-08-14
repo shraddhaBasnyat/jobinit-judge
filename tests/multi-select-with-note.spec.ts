@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 
 import { isMultiSelectWithNoteComplete } from "@/components/blind-call/MultiSelectWithNote"
 import { resolveColorVar } from "./helpers"
@@ -15,16 +15,24 @@ const ARCHETYPE_LABELS = [
   "Founding Engineer",
 ]
 
+// Scoped to the jd panel — CarouselShell mounts all stage panels in the DOM
+// at once, and resume also renders its own MultiSelectWithNote instance, so
+// an unscoped page.getByTestId("multi-select-with-note-*") is ambiguous.
+function jdPanel(page: Page) {
+  return page.locator('[data-blind-call-stage="jd"]')
+}
+
 test.describe("MultiSelectWithNote — pills", () => {
   test("all 6 archetype pills render and support independent multi-select", async ({ page }) => {
     await page.goto("/judge")
+    const panel = jdPanel(page)
 
     for (const label of ARCHETYPE_LABELS) {
-      await expect(page.getByTestId(`multi-select-with-note-pill-${label}`)).toBeVisible()
+      await expect(panel.getByTestId(`multi-select-with-note-pill-${label}`)).toBeVisible()
     }
 
-    const first = page.getByTestId("multi-select-with-note-pill-Specialist Depth")
-    const second = page.getByTestId("multi-select-with-note-pill-Scale Operator")
+    const first = panel.getByTestId("multi-select-with-note-pill-Specialist Depth")
+    const second = panel.getByTestId("multi-select-with-note-pill-Scale Operator")
 
     await expect(first).toHaveAttribute("aria-pressed", "false")
     await first.click()
@@ -45,8 +53,9 @@ test.describe("InputWithInlineSave — commit and checkmark behavior", () => {
     page,
   }) => {
     await page.goto("/judge")
-    const field = page.getByTestId("multi-select-with-note-note-field")
-    const checkmark = page.getByTestId("multi-select-with-note-note-checkmark")
+    const panel = jdPanel(page)
+    const field = panel.getByTestId("multi-select-with-note-note-field")
+    const checkmark = panel.getByTestId("multi-select-with-note-note-checkmark")
 
     await expect(checkmark).toHaveCSS("opacity", "0")
 
@@ -67,8 +76,9 @@ test.describe("InputWithInlineSave — commit and checkmark behavior", () => {
 
   test("checkmark background resolves to the reviewed token", async ({ page }) => {
     await page.goto("/judge")
-    const field = page.getByTestId("multi-select-with-note-note-field")
-    const checkmark = page.getByTestId("multi-select-with-note-note-checkmark")
+    const panel = jdPanel(page)
+    const field = panel.getByTestId("multi-select-with-note-note-field")
+    const checkmark = panel.getByTestId("multi-select-with-note-note-checkmark")
 
     await field.fill("Somewhere between scale operator and founding engineer")
     await field.blur()
@@ -81,9 +91,10 @@ test.describe("InputWithInlineSave — commit and checkmark behavior", () => {
     page,
   }) => {
     await page.goto("/judge")
-    const field = page.getByTestId("multi-select-with-note-note-field")
+    const panel = jdPanel(page)
+    const field = panel.getByTestId("multi-select-with-note-note-field")
     const wrapper = field.locator("xpath=..")
-    const row = page.getByTestId("multi-select-with-note-note-row")
+    const row = panel.getByTestId("multi-select-with-note-note-row")
 
     const emptyWrapperBox = await wrapper.boundingBox()
     const emptyRowBox = await row.boundingBox()
@@ -100,7 +111,7 @@ test.describe("InputWithInlineSave — commit and checkmark behavior", () => {
 
   test("long note text truncates with ellipsis instead of clipping silently", async ({ page }) => {
     await page.goto("/judge")
-    const field = page.getByTestId("multi-select-with-note-note-field")
+    const field = jdPanel(page).getByTestId("multi-select-with-note-note-field")
 
     const longValue =
       "This is a deliberately long custom archetype note meant to overflow the field's visible width so the ellipsis truncation behavior actually gets exercised instead of just asserted in theory."
@@ -121,7 +132,7 @@ test.describe("InputWithInlineSave — commit and checkmark behavior", () => {
 test.describe("InputWithInlineSave — 140-char soft limit counter", () => {
   test("counter stays hidden below 100 chars", async ({ page }) => {
     await page.goto("/judge")
-    const field = page.getByTestId("multi-select-with-note-note-field")
+    const field = jdPanel(page).getByTestId("multi-select-with-note-note-field")
 
     await field.fill("a".repeat(99))
     await expect(page.getByText("99/140")).toHaveCount(0)
@@ -131,7 +142,7 @@ test.describe("InputWithInlineSave — 140-char soft limit counter", () => {
     page,
   }) => {
     await page.goto("/judge")
-    const field = page.getByTestId("multi-select-with-note-note-field")
+    const field = jdPanel(page).getByTestId("multi-select-with-note-note-field")
 
     const mutedForeground = await resolveColorVar(page, "--muted-foreground")
     const warning = await resolveColorVar(page, "--warning")
@@ -154,7 +165,7 @@ test.describe("InputWithInlineSave — 140-char soft limit counter", () => {
     page,
   }) => {
     await page.goto("/judge")
-    const field = page.getByTestId("multi-select-with-note-note-field")
+    const field = jdPanel(page).getByTestId("multi-select-with-note-note-field")
 
     const over140 = "a".repeat(150)
     await field.fill(over140)
@@ -217,9 +228,10 @@ test.describe("Source-level guardrails", () => {
 test.describe("Visual states (manual comparison against Figma reference screenshots)", () => {
   test("captures empty, pills-only, note-only, and fully-filled screenshots", async ({ page }) => {
     await page.goto("/judge")
-    const card = page.getByTestId("multi-select-with-note")
-    const scaleOperator = page.getByTestId("multi-select-with-note-pill-Scale Operator")
-    const noteField = page.getByTestId("multi-select-with-note-note-field")
+    const panel = jdPanel(page)
+    const card = panel.getByTestId("multi-select-with-note")
+    const scaleOperator = panel.getByTestId("multi-select-with-note-pill-Scale Operator")
+    const noteField = panel.getByTestId("multi-select-with-note-note-field")
 
     await card.screenshot({ path: "test-results/multi-select-with-note-empty.png" })
 

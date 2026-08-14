@@ -157,13 +157,28 @@ test.describe("isStatementAssessComplete", () => {
 
 test.describe("isResumeStageComplete", () => {
   const STATEMENTS: Statement[] = STATEMENT_IDS.map((id) => ({ id, statement: id }))
+  const COMPLETE_ARCHETYPE: ResumeStageState["archetype"] = {
+    selected: ["specialist_depth"],
+    customNote: "",
+  }
+  const EMPTY_ARCHETYPE: ResumeStageState["archetype"] = { selected: [], customNote: "" }
 
-  function resumeState(values: Record<string, string>): ResumeStageState {
+  function resumeState(
+    values: Record<string, string>,
+    archetype: ResumeStageState["archetype"] = COMPLETE_ARCHETYPE
+  ): ResumeStageState {
     return {
       summary: { badgeLabel: "Resume", roleTitle: "Test Role" },
       statements: STATEMENTS,
       values,
+      archetype,
     }
+  }
+
+  const ALL_JUDGED = {
+    [STATEMENT_IDS[0]]: "backedUp",
+    [STATEMENT_IDS[1]]: "allTalk",
+    [STATEMENT_IDS[2]]: "soWhat",
   }
 
   test("false when no statements are judged", () => {
@@ -174,16 +189,18 @@ test.describe("isResumeStageComplete", () => {
     expect(isResumeStageComplete(resumeState({ [STATEMENT_IDS[0]]: "backedUp" }))).toBe(false)
   })
 
-  test("true when all statements are judged", () => {
+  test("true when all statements are judged and archetype is complete", () => {
+    expect(isResumeStageComplete(resumeState(ALL_JUDGED))).toBe(true)
+  })
+
+  test("false when all statements are judged but archetype is empty (AND, not statements-only)", () => {
+    expect(isResumeStageComplete(resumeState(ALL_JUDGED, EMPTY_ARCHETYPE))).toBe(false)
+  })
+
+  test("false when archetype is complete but statements aren't all judged", () => {
     expect(
-      isResumeStageComplete(
-        resumeState({
-          [STATEMENT_IDS[0]]: "backedUp",
-          [STATEMENT_IDS[1]]: "allTalk",
-          [STATEMENT_IDS[2]]: "soWhat",
-        })
-      )
-    ).toBe(true)
+      isResumeStageComplete(resumeState({ [STATEMENT_IDS[0]]: "backedUp" }, COMPLETE_ARCHETYPE))
+    ).toBe(false)
   })
 })
 
@@ -206,6 +223,12 @@ test.describe("Resume stage integration", () => {
   test("resume completeness requires all 3 statements judged", async ({ page }) => {
     await goToResumeStage(page)
     const next = page.getByRole("button", { name: "Next stage" })
+    const resumePanel = page.locator('[data-blind-call-stage="resume"]')
+    await expect(next).toBeDisabled()
+
+    // Archetype pre-satisfied so this test isolates statement-judging
+    // progression only — the archetype half of the AND has its own test below.
+    await resumePanel.getByTestId("multi-select-with-note-pill-Specialist Depth").click()
     await expect(next).toBeDisabled()
 
     await page
@@ -224,6 +247,25 @@ test.describe("Resume stage integration", () => {
       .getByTestId(`statement-assess-${STATEMENT_IDS[2]}`)
       .getByTestId("assess-option-radio-soWhat")
       .click()
+    await expect(next).toBeEnabled()
+  })
+
+  test("resume completeness also requires the archetype field, independent of statements", async ({
+    page,
+  }) => {
+    await goToResumeStage(page)
+    const next = page.getByRole("button", { name: "Next stage" })
+    const resumePanel = page.locator('[data-blind-call-stage="resume"]')
+
+    for (const id of STATEMENT_IDS) {
+      await page
+        .getByTestId(`statement-assess-${id}`)
+        .getByTestId("assess-option-radio-backedUp")
+        .click()
+    }
+    await expect(next).toBeDisabled()
+
+    await resumePanel.getByTestId("multi-select-with-note-pill-Specialist Depth").click()
     await expect(next).toBeEnabled()
   })
 

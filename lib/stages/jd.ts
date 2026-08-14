@@ -4,39 +4,7 @@ import {
   type InputWithButtonValue,
 } from "@/components/blind-call/InputWithButton"
 import { isMultiSelectWithNoteComplete } from "@/components/blind-call/MultiSelectWithNote"
-
-export type RoleArchetype =
-  | "specialist_depth"
-  | "scale_operator"
-  | "modernization_refactor"
-  | "growth_hire"
-  | "greenfield_builder"
-  | "founding_engineer"
-
-// Display copy for MultiSelectWithNote's domain-agnostic string[] options —
-// label text is cosmetic and intentionally decoupled from the backing enum
-// key (e.g. "Modernization" vs. modernization_refactor is not a mismatch to
-// fix, just a label/value split). Keys listed in the ticket's display order
-// so Object.values(ARCHETYPE_LABELS) below yields the correct option order.
-export const ARCHETYPE_LABELS: Record<RoleArchetype, string> = {
-  specialist_depth: "Specialist Depth",
-  scale_operator: "Scale Operator",
-  modernization_refactor: "Modernization",
-  growth_hire: "Growth Hire",
-  greenfield_builder: "Greenfield Builder",
-  founding_engineer: "Founding Engineer",
-}
-
-const ARCHETYPE_KEYS_BY_LABEL: Record<string, RoleArchetype> = Object.fromEntries(
-  (Object.entries(ARCHETYPE_LABELS) as [RoleArchetype, string][]).map(([key, label]) => [
-    label,
-    key,
-  ])
-)
-
-export function archetypeKeyForLabel(label: string): RoleArchetype | undefined {
-  return ARCHETYPE_KEYS_BY_LABEL[label]
-}
+import type { RoleArchetype } from "@/lib/stages/blind-call"
 
 export type JDStageState = {
   // Ticket 2 — read-only, fixed at hardcode time, never changes

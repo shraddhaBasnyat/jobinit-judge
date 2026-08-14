@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 
-import { dragCarousel, forceJDComplete } from "./helpers"
+import { dragCarousel, forceJDComplete, forceResumeComplete } from "./helpers"
 
 test.describe("Draft-dirty forward-nav gate", () => {
   test("Next disables when jd is complete but the real-ask draft is unsaved, re-enables once Added", async ({
@@ -49,11 +49,14 @@ test.describe("Draft-dirty forward-nav gate", () => {
     const next = page.getByRole("button", { name: "Next stage" })
     await expect(next).toBeEnabled()
 
-    await page.getByTestId("multi-select-with-note-note-field").fill("An unsaved note edit")
+    // Scoped to the jd panel — resume also renders a MultiSelectWithNote
+    // instance now, so an unscoped note-field testid is ambiguous.
+    const jdPanel = page.locator('[data-blind-call-stage="jd"]')
+    await jdPanel.getByTestId("multi-select-with-note-note-field").fill("An unsaved note edit")
     await expect(next).toBeDisabled()
     await expect(next).toHaveAttribute("aria-disabled", "true")
 
-    await page.getByTestId("multi-select-with-note-note-field").blur()
+    await jdPanel.getByTestId("multi-select-with-note-note-field").blur()
     await expect(next).toBeEnabled()
   })
 
@@ -70,4 +73,28 @@ test.describe("Draft-dirty forward-nav gate", () => {
   // an explicit Add click, so a drag from the track's center leaves it
   // genuinely dirty. The dirty-gate logic itself and jdStageBlockedMessage's
   // note-specific copy are still fully covered — see tests/stages.spec.ts.
+
+  test("Next disables when resume is complete but the archetype note draft is unsaved, re-enables once blurred", async ({
+    page,
+  }) => {
+    await page.goto("/judge")
+    await forceJDComplete(page)
+    await page.getByRole("button", { name: "Next stage" }).click()
+    await forceResumeComplete(page)
+
+    const next = page.getByRole("button", { name: "Next stage" })
+    await expect(next).toBeEnabled()
+
+    // Scoped to the resume panel — jd also renders a MultiSelectWithNote
+    // instance, so an unscoped note-field testid is ambiguous.
+    const resumePanel = page.locator('[data-blind-call-stage="resume"]')
+    await resumePanel
+      .getByTestId("multi-select-with-note-note-field")
+      .fill("An unsaved note edit")
+    await expect(next).toBeDisabled()
+    await expect(next).toHaveAttribute("aria-disabled", "true")
+
+    await resumePanel.getByTestId("multi-select-with-note-note-field").blur()
+    await expect(next).toBeEnabled()
+  })
 })

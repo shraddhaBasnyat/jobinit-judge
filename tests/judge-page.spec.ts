@@ -21,7 +21,12 @@ test.describe("Judge page", () => {
     const next = page.getByRole("button", { name: "Next stage" })
     await expect(next).toBeDisabled()
 
-    await page.getByTestId("multi-select-with-note-pill-Specialist Depth").click()
+    // Scoped to the jd panel — resume also renders a MultiSelectWithNote
+    // instance now, so an unscoped pill testid is ambiguous.
+    await page
+      .locator('[data-blind-call-stage="jd"]')
+      .getByTestId("multi-select-with-note-pill-Specialist Depth")
+      .click()
     await expect(next).toBeDisabled()
 
     await page.getByTestId("input-with-button-field").fill("The real ask")
