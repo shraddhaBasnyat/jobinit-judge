@@ -1,17 +1,22 @@
 export {
-  ARCHETYPE_LABELS,
-  archetypeKeyForLabel,
   isJDStageComplete,
   canAdvanceJDStage,
   jdStageBlockedMessage,
-  type RoleArchetype,
   type JDStageState,
 } from "@/lib/stages/jd"
 
 export {
   STAGE_META,
+  ARCHETYPE_LABELS,
+  archetypeKeyForLabel,
   type BlindCallStageId,
   type BlindCallState,
+  type RoleArchetype,
 } from "@/lib/stages/blind-call"
 
-export { isResumeStageComplete, type ResumeStageState } from "@/lib/stages/resume"
+export {
+  isResumeStageComplete,
+  canAdvanceResumeStage,
+  resumeStageBlockedMessage,
+  type ResumeStageState,
+} from "@/lib/stages/resume"

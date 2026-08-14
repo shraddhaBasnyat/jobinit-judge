@@ -31,7 +31,13 @@ export async function resolveColorVar(page: Page, cssVar: string) {
 }
 
 export async function forceJDComplete(page: Page) {
-  await page.getByTestId("multi-select-with-note-pill-Specialist Depth").click()
+  // Scoped to the jd panel — CarouselShell mounts all stage panels in the
+  // DOM at once, and resume also renders a MultiSelectWithNote instance, so
+  // an unscoped pill testid is ambiguous.
+  await page
+    .locator('[data-blind-call-stage="jd"]')
+    .getByTestId("multi-select-with-note-pill-Specialist Depth")
+    .click()
   await page.getByTestId("input-with-button-field").fill("Placeholder real ask")
   await page.getByTestId("input-with-button-add").click()
 }
@@ -45,4 +51,10 @@ export async function forceResumeComplete(page: Page) {
       .getByTestId("assess-option-radio-backedUp")
       .click()
   }
+  // Scoped to the resume panel — see forceJDComplete's comment above for why
+  // an unscoped pill testid is ambiguous once both stages render one.
+  await page
+    .locator('[data-blind-call-stage="resume"]')
+    .getByTestId("multi-select-with-note-pill-Specialist Depth")
+    .click()
 }

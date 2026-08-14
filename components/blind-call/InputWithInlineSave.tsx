@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Check } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -33,6 +33,7 @@ export function InputWithInlineSave({
 }: InputWithInlineSaveProps) {
   const [draft, setDraft] = useState(value)
   const [lastCommitted, setLastCommitted] = useState(value)
+  const scrollYOnFocusRef = useRef<number | null>(null)
 
   // filled means "the currently-displayed draft matches what's committed" —
   // recomputed live on every keystroke, not a one-way flag set at first save.
@@ -50,6 +51,22 @@ export function InputWithInlineSave({
     onDraftDirtyChange?.(isDraftDirty(next, lastCommitted))
   }
 
+  // Same mobile-viewport-Chromium bug CarouselShell's track-wide guard
+  // covers for pills/radios (see its comment), but that general,
+  // detection-based guard doesn't reliably catch this field's jump —
+  // confirmed via real device testing after it looked fixed in automation.
+  // Narrower fix instead: this field's known bad trigger is blur/commit,
+  // so just record the scroll position on focus and force it back,
+  // unconditionally, right after blur — no attempt to detect whether a
+  // jump actually happened. Checked whether a matching per-keystroke
+  // restore is also needed for a mid-typing jump; couldn't reproduce one
+  // under this fix across repeated runs, so not adding it speculatively —
+  // if a visible mid-typing jump shows up in real use, add the same
+  // pattern to handleDraftChange below.
+  function handleFocus() {
+    scrollYOnFocusRef.current = window.scrollY
+  }
+
   function handleBlur() {
     // MVP scope: this only commits to local component state. Backend write happens
     // once, batched across all stages, on Next-click/swipe-forward — not per field.
@@ -60,6 +77,16 @@ export function InputWithInlineSave({
     setLastCommitted(draft)
     onCommit(draft)
     onDraftDirtyChange?.(false)
+
+    const savedScrollY = scrollYOnFocusRef.current
+    scrollYOnFocusRef.current = null
+    if (savedScrollY != null) {
+      requestAnimationFrame(() => {
+        if (window.scrollY !== savedScrollY) {
+          window.scrollTo(0, savedScrollY)
+        }
+      })
+    }
   }
 
   return (
@@ -68,6 +95,7 @@ export function InputWithInlineSave({
         <TextField
           value={draft}
           onValueChange={handleDraftChange}
+          onFocus={handleFocus}
           onBlur={handleBlur}
           placeholder={placeholder}
           data-testid="multi-select-with-note-note-field"

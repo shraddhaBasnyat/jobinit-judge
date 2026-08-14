@@ -58,7 +58,12 @@ test.describe("InputWithButton", () => {
     const addButton = page.getByTestId("input-with-button-add")
     const next = page.getByRole("button", { name: "Next stage" })
 
-    await page.getByTestId("multi-select-with-note-pill-Specialist Depth").click()
+    // Scoped to the jd panel — resume also renders a MultiSelectWithNote
+    // instance now, so an unscoped pill testid is ambiguous.
+    await page
+      .locator('[data-blind-call-stage="jd"]')
+      .getByTestId("multi-select-with-note-pill-Specialist Depth")
+      .click()
     await expect(next).toBeDisabled()
 
     await field.fill("The real ask")
@@ -74,7 +79,12 @@ test.describe("InputWithButton", () => {
     const field = page.getByTestId("input-with-button-field")
     const next = page.getByRole("button", { name: "Next stage" })
 
-    await page.getByTestId("multi-select-with-note-pill-Specialist Depth").click()
+    // Scoped to the jd panel — resume also renders a MultiSelectWithNote
+    // instance now, so an unscoped pill testid is ambiguous.
+    await page
+      .locator('[data-blind-call-stage="jd"]')
+      .getByTestId("multi-select-with-note-pill-Specialist Depth")
+      .click()
     await field.fill("Draft text sitting in the field")
     await expect(next).toBeDisabled()
   })

@@ -50,6 +50,68 @@ export function CarouselShell({ stages, currentStageId, onStageChange }: Carouse
     return () => ro.disconnect()
   }, [])
 
+  // Workaround, not a root-cause fix, for a mobile-viewport-Chromium-only
+  // bug (Chrome DevTools device toolbar / Playwright isMobile+hasTouch;
+  // never reproduces on desktop Chromium): tapping a plain <button> pill or
+  // a Base UI Radio inside this track snaps window.scrollY to 0 whenever
+  // the track carries an active CSS `transform` (any stage past index 0 —
+  // "jd" at index 0 is never affected, since `x` only renders as
+  // `translateX(0)`/"none" there). Guards by tracking a "stable" scrollY,
+  // updated only when a `scroll` event was just preceded by a genuine
+  // touchmove/wheel; any other scroll while focus sits inside this track is
+  // reverted, regardless of which browser-internal mechanism caused it.
+  // Only attached while `currentIndex > 0`, so "jd" never pays for this.
+  //
+  // Covers buttons and radios (verified via mobile-emulation reproduction:
+  // archetype pills, both StatementAssess radio rows, plus the drag/
+  // rubber-band reject-spring gesture from Ticket #1, confirmed unaffected
+  // since it's a transform animation that never touches window.scrollY).
+  // Does NOT cover the archetype note field (InputWithInlineSave) — that
+  // field's jump needed a separate, narrower fix local to the component
+  // itself; see its own comment for why this general approach didn't
+  // extend to it.
+  //
+  // Caveat that matters going forward: this guard is the only thing in the
+  // codebase that calls scrollTo/scrollBy/scrollIntoView today (confirmed
+  // via grep), so there's nothing legitimate to fight — but a future
+  // feature that intentionally scrolls while focus is inside this track
+  // (e.g. scrolling a validation error into view) would get reverted by
+  // this too.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || currentIndex === 0) return
+
+    let stableScrollY = window.scrollY
+    let gestureActiveUntil = 0
+    const GESTURE_WINDOW_MS = 150
+
+    function markGestureActive() {
+      gestureActiveUntil = Date.now() + GESTURE_WINDOW_MS
+    }
+
+    function handleScroll() {
+      const focusInsideTrack = Boolean(
+        document.activeElement && containerRef.current?.contains(document.activeElement)
+      )
+      const scrolledByGesture = Date.now() <= gestureActiveUntil
+
+      if (scrolledByGesture || !focusInsideTrack) {
+        stableScrollY = window.scrollY
+        return
+      }
+      window.scrollTo(0, stableScrollY)
+    }
+
+    window.addEventListener("touchmove", markGestureActive, { passive: true })
+    window.addEventListener("wheel", markGestureActive, { passive: true })
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => {
+      window.removeEventListener("touchmove", markGestureActive)
+      window.removeEventListener("wheel", markGestureActive)
+      window.removeEventListener("scroll", handleScroll)
+    }
+  }, [currentIndex])
+
   useEffect(() => {
     if (!cardWidth) return
     animate(x, -currentIndex * cardWidth, REST_SPRING)

@@ -10,7 +10,8 @@ import {
   STAGE_META,
   canAdvanceJDStage,
   jdStageBlockedMessage,
-  isResumeStageComplete,
+  canAdvanceResumeStage,
+  resumeStageBlockedMessage,
   type BlindCallStageId,
   type JDStageState,
   type ResumeStageState,
@@ -27,6 +28,7 @@ const INITIAL_RESUME_STATE: ResumeStageState = {
   summary: MOCK_CASE.resume.summary,
   statements: MOCK_CASE.resume.statements,
   values: {},
+  archetype: { selected: [], customNote: "" },
 }
 
 function PlaceholderStage({ title }: { title: string }) {
@@ -43,6 +45,7 @@ export default function JudgePage() {
   const [hasDirtyRealAskDraft, setHasDirtyRealAskDraft] = useState(false)
   const [hasDirtyNoteDraft, setHasDirtyNoteDraft] = useState(false)
   const [resume, setResume] = useState<ResumeStageState>(INITIAL_RESUME_STATE)
+  const [hasDirtyResumeNoteDraft, setHasDirtyResumeNoteDraft] = useState(false)
 
   const stages: Stage[] = useMemo(
     () =>
@@ -65,8 +68,15 @@ export default function JudgePage() {
         if (meta.id === "resume") {
           return {
             ...meta,
-            isComplete: () => isResumeStageComplete(resume),
-            content: <ResumeStageContent resume={resume} onChange={setResume} />,
+            isComplete: () => canAdvanceResumeStage(resume, hasDirtyResumeNoteDraft),
+            blockedMessage: () => resumeStageBlockedMessage(hasDirtyResumeNoteDraft),
+            content: (
+              <ResumeStageContent
+                resume={resume}
+                onChange={setResume}
+                onNoteDraftDirtyChange={setHasDirtyResumeNoteDraft}
+              />
+            ),
           }
         }
         return {
@@ -75,7 +85,7 @@ export default function JudgePage() {
           content: <PlaceholderStage title={`${meta.label} — coming soon`} />,
         }
       }),
-    [jd, hasDirtyRealAskDraft, hasDirtyNoteDraft, resume]
+    [jd, hasDirtyRealAskDraft, hasDirtyNoteDraft, resume, hasDirtyResumeNoteDraft]
   )
 
   return (
