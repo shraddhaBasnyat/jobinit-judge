@@ -187,6 +187,36 @@ export function CarouselShell({ stages, currentStageId, onStageChange }: Carouse
   const nextDisabled = !current?.isComplete()
   const prevDisabled = currentIndex === 0
 
+  // Framer Motion's drag="x" listens for pointerdown on this track's own DOM
+  // node — it doesn't distinguish "the user meant to swipe" from "the user
+  // clicked a button/radio inside stage content and their mouse drifted a
+  // few pixels mid-click." Any interactive descendant can accidentally
+  // trigger a full stage-navigation swipe this way. This capture-phase
+  // handler sits on each stage's wrapper div (a descendant of the track,
+  // ancestor of stage content) and stops propagation before the event ever
+  // reaches the track, so Framer Motion's own (bubble-phase) pointerdown
+  // listener never fires — without disabling genuine swipes, which always
+  // start on non-interactive panel content and never hit this branch.
+  // Verified directly: reproduced the false-navigation with real pointer
+  // sequences (mousedown + a few px of horizontal drift + mouseup) on both
+  // StatementAssess's existing radio and RadioCard, then confirmed this
+  // guard eliminates it while leaving normal clicks and genuine
+  // swipe-to-navigate unaffected.
+  //
+  // Caveat that matters going forward: the selector below is a fixed,
+  // closed list. A future interactive control built without a matching
+  // tag/role — e.g. a custom <div>-based toggle with just an onClick, no
+  // role="button" — falls outside it silently, and this exact bug
+  // resurfaces for that control with no error to signal it. Either extend
+  // this selector when adding such a control, or give it its own
+  // onPointerDown={(e) => e.stopPropagation()}.
+  const stopDragOnInteractive = useCallback((e: React.PointerEvent) => {
+    const target = e.target as HTMLElement
+    if (target.closest('button, [role="radio"], [role="checkbox"], a[href], input, textarea, select')) {
+      e.stopPropagation()
+    }
+  }, [])
+
   return (
     <div className="flex w-full flex-col gap-4">
       <NavDotStrip stages={stages} currentStageId={currentStageId} />
@@ -209,6 +239,7 @@ export function CarouselShell({ stages, currentStageId, onStageChange }: Carouse
                 data-active={isActive || undefined}
                 aria-hidden={!isActive}
                 inert={!isActive}
+                onPointerDownCapture={stopDragOnInteractive}
                 className="w-full shrink-0"
               >
                 {stage.content}
