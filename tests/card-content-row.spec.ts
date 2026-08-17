@@ -51,4 +51,34 @@ test.describe("CardContentRow", () => {
     const overflow = await row.evaluate((el) => getComputedStyle(el).overflow)
     expect(overflow).not.toBe("hidden")
   })
+
+  test("pill variant renders label, pill, and content in order (Ticket 17)", async ({ page }) => {
+    await page.goto("/dev/showcase")
+    const row = page.getByTestId("pill-variant-showcase").getByTestId("card-content-row")
+
+    await expect(row.locator("p").first()).toHaveText("PILL VARIANT")
+    await expect(row.getByTestId("pill")).toHaveText("Specialist Depth")
+    await expect(row.locator("p").last()).toHaveText("Body copy shown alongside the pill.")
+
+    // Structural order matters: label, then pill, then content — verified via
+    // each element's position in the DOM rather than just presence. Queries
+    // descendants (not just direct children) since the pill sits inside a
+    // self-start wrapper span, not as a direct child of the row.
+    const order = await row.evaluate((el) =>
+      Array.from(el.querySelectorAll('p, [data-testid="pill"]')).map(
+        (node) => node.getAttribute("data-testid") ?? node.tagName
+      )
+    )
+    expect(order).toEqual(["P", "pill", "P"])
+  })
+
+  test("pill hugs its label width instead of stretching to the row's full width", async ({
+    page,
+  }) => {
+    await page.goto("/dev/showcase")
+    const row = page.getByTestId("pill-variant-showcase").getByTestId("card-content-row")
+    const pillWidth = (await row.getByTestId("pill").boundingBox())!.width
+    const rowWidth = (await row.boundingBox())!.width
+    expect(pillWidth).toBeLessThan(rowWidth * 0.6)
+  })
 })

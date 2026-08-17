@@ -1,4 +1,5 @@
 import type { Statement } from "@/components/blind-call/StatementAssess"
+import type { FitVerdict, RoleArchetype } from "@/lib/stages/blind-call"
 
 export type JDSummary = {
   badgeLabel: string
@@ -13,15 +14,39 @@ export type ResumeSummary = {
   roleTitle: string
 }
 
+// This is JobInit's actual AI output (ground truth) for the case, not
+// reviewer-facing copy — field names mirror JobInit's production schema
+// vocabulary exactly (jdArchetype, realAsk, candidateArchetype,
+// careerArcNote, scenarioId). realAsk here is intentionally independent
+// from JDStageState's realAsk.value — that's the reviewer's own typed
+// answer, this is the AI's, and they happen to share a name.
+export type RevealCaseData = {
+  jdArchetype: {
+    ideal: RoleArchetype
+    couldWork: RoleArchetype[]
+  }
+  realAsk: string
+  candidateArchetype: RoleArchetype
+  careerArcNote: {
+    transitions: { from: RoleArchetype; to: RoleArchetype }[]
+  }
+  scenarioId: FitVerdict
+  // Longer reasoning behind scenarioId — distinct from FIT_VERDICT_OPTIONS'
+  // short `hook` (used for the Fit row's pill body text); this is the
+  // Fit Summary row's own longer-form content.
+  fitSummary: string
+}
+
 // Case data is hardcoded per-stage here (no backend yet, per project scope).
-// Only jd and resume are populated — other BlindCallStageId keys aren't
-// added until their own tickets resolve whether/what case data they need.
+// Other BlindCallStageId keys (revise, done) aren't added until their own
+// tickets resolve whether/what case data they need.
 export type MockCase = {
   jd: JDSummary
   resume: {
     summary: ResumeSummary
     statements: Statement[]
   }
+  reveal: RevealCaseData
 }
 
 export const MOCK_CASE: MockCase = {
@@ -56,5 +81,20 @@ export const MOCK_CASE: MockCase = {
           "Progressed from Software Engineer to Engineering Manager to Staff Engineer over six years on, taking on org-wide architecture mandates like retiring a legacy data-access layer used by the entire core customer funnel.",
       },
     ],
+  },
+  reveal: {
+    jdArchetype: {
+      ideal: "greenfield_builder",
+      couldWork: ["founding_engineer", "growth_hire"],
+    },
+    realAsk:
+      "They need someone who can take a fuzzy AI product problem from prototype to production without a platform team behind them, and who already trusts eval/testing rigor enough to build it in from day one.",
+    candidateArchetype: "founding_engineer",
+    careerArcNote: {
+      transitions: [{ from: "growth_hire", to: "founding_engineer" }],
+    },
+    scenarioId: "invisible_expert",
+    fitSummary:
+      "The resume's title and framing undersell what's actually there — six years including an EM stint reads as management-track, not hands-on AI builder, even though the JobInit project alone demonstrates exactly the loop this role needs: LangGraph agent design, deterministic + LLM-driven scoring, and a dedicated eval suite built without being asked. The skills are real; the resume just doesn't say them the way an AI-native product team is trained to look for.",
   },
 }
