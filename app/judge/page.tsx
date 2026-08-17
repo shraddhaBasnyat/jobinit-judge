@@ -7,6 +7,7 @@ import { BlindCallToaster } from "@/components/blind-call/Toast"
 import { JDStageContent } from "@/components/blind-call/JDStageContent"
 import { ResumeStageContent } from "@/components/blind-call/ResumeStageContent"
 import { FitStageContent } from "@/components/blind-call/FitStageContent"
+import { RevealStageContent } from "@/components/blind-call/RevealStageContent"
 import {
   STAGE_META,
   canAdvanceJDStage,
@@ -14,6 +15,7 @@ import {
   canAdvanceResumeStage,
   resumeStageBlockedMessage,
   isFitStageComplete,
+  isRevealStageComplete,
   type BlindCallStageId,
   type JDStageState,
   type ResumeStageState,
@@ -92,6 +94,13 @@ export default function JudgePage() {
             ...meta,
             isComplete: () => isFitStageComplete(fit),
             content: <FitStageContent fit={fit} onChange={setFit} />,
+          }
+        }
+        if (meta.id === "reveal") {
+          return {
+            ...meta,
+            isComplete: () => isRevealStageComplete(),
+            content: <RevealStageContent reveal={MOCK_CASE.reveal} />,
           }
         }
         return {

@@ -25,6 +25,14 @@ export default function DevShowcasePage() {
       <div data-testid="long-content-showcase">
         <CardContentRow variant="text" label="LONG CONTENT" content={LONG_CONTENT} />
       </div>
+      <div data-testid="pill-variant-showcase">
+        <CardContentRow
+          variant="pill"
+          label="PILL VARIANT"
+          pillLabel="Specialist Depth"
+          content="Body copy shown alongside the pill."
+        />
+      </div>
     </div>
   )
 }
