@@ -47,7 +47,6 @@ export function AssessOptionLegend({ option }: AssessOptionLegendProps) {
 
 export type AssessOptionRadioProps = {
   option: AssessOption
-  selected: boolean
 }
 
 // Presentational only — value/onValueChange live on the owning RadioGroup in
@@ -62,26 +61,23 @@ export type AssessOptionRadioProps = {
 // text is never used as a fallback, confirmed by an actual failing
 // getByRole("radio", { name: ... }) Playwright assertion before this was
 // added.
-export function AssessOptionRadio({ option, selected }: AssessOptionRadioProps) {
+export function AssessOptionRadio({ option }: AssessOptionRadioProps) {
   return (
     <Radio.Root
       value={option.value}
       aria-label={`Mark as ${option.label.toLowerCase()}`}
       data-testid={`assess-option-radio-${option.value}`}
-      className="flex h-11 w-11 items-center justify-center rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="group flex h-11 w-11 items-center justify-center rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <div
         aria-hidden="true"
-        className={cn(
-          "flex size-7 items-center justify-center rounded-full",
-          selected ? "bg-secondary" : "border border-border bg-background"
-        )}
+        className="flex size-7 items-center justify-center rounded-full group-data-checked:bg-secondary group-data-unchecked:border group-data-unchecked:border-border group-data-unchecked:bg-background"
       >
         <AssessOptionBase
           icon={option.icon}
           label={`Mark as ${option.label.toLowerCase()}`}
           hideLabel
-          iconClassName={cn("size-4", selected ? "text-primary" : "text-muted-foreground")}
+          iconClassName="size-4 group-data-checked:text-primary group-data-unchecked:text-muted-foreground"
         />
       </div>
     </Radio.Root>

@@ -50,7 +50,7 @@ export function StatementAssess({ statement, options, value, onChange }: Stateme
         className="flex gap-4"
       >
         {options.map((option) => (
-          <AssessOptionRadio key={option.value} option={option} selected={value === option.value} />
+          <AssessOptionRadio key={option.value} option={option} />
         ))}
       </RadioGroup>
     </div>

@@ -13,20 +13,46 @@ export type SelectOption = {
   subOptionsPrompt?: string
 }
 
-// Top-level and sub-level indicators use different white tokens per the raw
-// Figma export — top-level maps to --card, sub-level to --background — not
-// the same color, despite looking similar in the rendered screenshots.
-function RadioIndicator({ selected, background }: { selected: boolean; background: "card" | "background" }) {
-  const bg = background === "card" ? "bg-card" : "bg-background"
-  if (selected) {
+// Styled entirely off the enclosing Radio.Root's own data-checked/
+// data-unchecked — no selected prop, since both call sites already sit
+// directly inside a Radio.Root that tracks this boolean for free.
+//
+// `nested` picks a *named* Tailwind group (group/option vs group/sub)
+// rather than the plain `group` class: the nested sub-option Radio.Root
+// sits inside the top-level card's own Radio.Root, and Tailwind's
+// group-data-* variant matches *any* ancestor with a matching group class
+// that has the attribute — not just the nearest one. With both Radio.Roots
+// sharing the unnamed `group` class, a checked top-level card bled its
+// data-checked down into every nested sub-option indicator regardless of
+// that sub-option's own state (all sub-options rendered as checked
+// whenever the parent card was selected). Named groups scope each
+// indicator to its own Radio.Root only.
+function RadioIndicator({ nested = false }: { nested?: boolean }) {
+  if (nested) {
     return (
-      <div aria-hidden="true" className={cn("relative size-4 shrink-0 rounded-full border border-primary", bg)}>
-        <div className="absolute top-1/2 left-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary" />
+      <div
+        aria-hidden="true"
+        className={cn(
+          "relative shrink-0 rounded-full border border-primary bg-card",
+          "group-data-unchecked/sub:size-4.5",
+          "group-data-checked/sub:size-4"
+        )}
+      >
+        <div className="absolute top-1/2 left-1/2 hidden size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary group-data-checked/sub:block" />
       </div>
     )
   }
   return (
-    <div aria-hidden="true" className={cn("size-[18px] shrink-0 rounded-full border border-primary", bg)} />
+    <div
+      aria-hidden="true"
+      className={cn(
+        "relative shrink-0 rounded-full border border-primary bg-card",
+        "group-data-unchecked/option:size-4.5",
+        "group-data-checked/option:size-4"
+      )}
+    >
+      <div className="absolute top-1/2 left-1/2 hidden size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary group-data-checked/option:block" />
+    </div>
   )
 }
 
@@ -55,11 +81,11 @@ export function RadioCard({ option, selected, selectedSubId, onSelectSub }: Radi
       aria-label={option.label}
       data-testid={`radio-card-${option.id}`}
       className={cn(
-        "flex w-full items-start gap-3 rounded-[12px] px-3.5 py-4 text-left",
+        "group/option flex w-full items-start gap-3 rounded-[12px] px-3.5 py-4 text-left",
         selected ? "border-2 border-primary bg-secondary" : "border border-border bg-muted/30"
       )}
     >
-      <RadioIndicator selected={selected} background="card" />
+      <RadioIndicator />
       <div className="flex w-full flex-col">
         <p className="text-sm leading-[14px] font-bold text-primary">{option.label}</p>
         <p className="text-[13px] leading-[14px] font-medium text-foreground">{option.hook}</p>
@@ -80,9 +106,9 @@ export function RadioCard({ option, selected, selectedSubId, onSelectSub }: Radi
                   value={sub.id}
                   aria-label={`${sub.label}. ${sub.hook}`}
                   data-testid={`radio-card-sub-${sub.id}`}
-                  className="flex h-7 w-full items-center gap-2 text-left"
+                  className="group/sub flex h-7 w-full items-center gap-2 text-left"
                 >
-                  <RadioIndicator selected={selectedSubId === sub.id} background="background" />
+                  <RadioIndicator nested />
                   <p className="text-sm leading-[14px] font-semibold text-primary">
                     {sub.label}. {sub.hook}
                   </p>
