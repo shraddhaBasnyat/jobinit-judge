@@ -9,6 +9,7 @@ export type NavDotProps = {
 
 export function NavDot({ label, state }: NavDotProps) {
   return (
+    // Marker attribute only — nothing reads data-nav-dot-state as a CSS selector.
     <span className="inline-flex items-center gap-1.5" data-nav-dot-state={state}>
       <span
         aria-hidden="true"

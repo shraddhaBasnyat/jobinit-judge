@@ -41,6 +41,7 @@ export function StatusPill({ tone, label }: StatusPillProps) {
   return (
     <Pill
       label={label}
+      // Marker attribute only — nothing reads this as a CSS selector.
       data-pill-tone={tone}
       className={cn(
         tone === "default" && "bg-secondary font-normal text-foreground",
@@ -61,6 +62,7 @@ export function TogglePill({ selected, label }: TogglePillProps) {
   return (
     <Pill
       label={label}
+      // Marker attribute only — nothing reads this as a CSS selector.
       data-pill-selected={selected}
       className={cn(
         selected

@@ -236,6 +236,7 @@ export function CarouselShell({ stages, currentStageId, onStageChange }: Carouse
               <div
                 key={stage.id}
                 data-blind-call-stage={stage.id}
+                // Marker attribute only — nothing reads data-active as a CSS selector.
                 data-active={isActive || undefined}
                 aria-hidden={!isActive}
                 inert={!isActive}
