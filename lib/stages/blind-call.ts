@@ -90,6 +90,8 @@ export type BlindCallState = {
   // ground truth (MOCK_CASE.reveal), no reviewer-editable state to hold.
   // revise / done — no fields yet, no ticket builds these; render as
   // placeholder stage content until they have real tickets.
+  locked: boolean
+  revised?: { jd: JDStageState; resume: ResumeStageState; fit: FitStageState }
 }
 
 export const STAGE_META: { id: BlindCallStageId; label: string }[] = [

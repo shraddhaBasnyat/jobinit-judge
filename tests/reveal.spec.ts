@@ -8,7 +8,7 @@ import {
 } from "@/lib/stages"
 import type { RevealCaseData } from "@/lib/mock-data/case"
 import { MOCK_CASE } from "@/lib/mock-data/case"
-import { forceJDComplete, forceResumeComplete, forceFitComplete } from "./helpers"
+import { reachLockInterstitial } from "./helpers"
 
 // No arguments — Reveal has no reviewer-editable state to compose, unlike
 // isJDStageComplete/isFitStageComplete which take a state object.
@@ -77,13 +77,12 @@ test.describe("describeCandidateArchetype", () => {
   })
 })
 
+// Forward from fit now lands on the lock interstitial (Ticket 21), not
+// reveal directly — the forward tap there both locks and advances in one
+// action, so reaching reveal takes one more "Next stage" click than before.
 async function goToReveal(page: import("@playwright/test").Page) {
   await page.goto("/judge")
-  await forceJDComplete(page)
-  await page.getByRole("button", { name: "Next stage" }).click()
-  await forceResumeComplete(page)
-  await page.getByRole("button", { name: "Next stage" }).click()
-  await forceFitComplete(page)
+  await reachLockInterstitial(page)
   await page.getByRole("button", { name: "Next stage" }).click()
   await expect(page.locator('[data-blind-call-stage="reveal"]')).toHaveAttribute(
     "data-active",
@@ -143,6 +142,14 @@ test.describe("RevealStageContent", () => {
 
   test("back button works unconditionally from Reveal", async ({ page }) => {
     await goToReveal(page)
+    // One step back from reveal now lands on the lock interstitial (Ticket
+    // 21), not fit directly — the interstitial occupies its own track
+    // position between them. A second step reaches fit.
+    await page.getByRole("button", { name: "Previous stage" }).click()
+    await expect(page.locator('[data-blind-call-stage="lock"]')).toHaveAttribute(
+      "data-active",
+      "true"
+    )
     await page.getByRole("button", { name: "Previous stage" }).click()
     await expect(page.locator('[data-blind-call-stage="fit"]')).toHaveAttribute("data-active", "true")
   })

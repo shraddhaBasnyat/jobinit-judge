@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState, type ReactNode } from "react"
 
 import { CarouselShell, type Stage } from "@/components/blind-call/CarouselShell"
 import { BlindCallToaster } from "@/components/blind-call/Toast"
@@ -8,6 +8,7 @@ import { JDStageContent } from "@/components/blind-call/JDStageContent"
 import { ResumeStageContent } from "@/components/blind-call/ResumeStageContent"
 import { FitStageContent } from "@/components/blind-call/FitStageContent"
 import { RevealStageContent } from "@/components/blind-call/RevealStageContent"
+import { LockInterstitialContent } from "@/components/blind-call/LockInterstitialContent"
 import {
   STAGE_META,
   canAdvanceJDStage,
@@ -48,14 +49,38 @@ function PlaceholderStage({ title }: { title: string }) {
   )
 }
 
+// Freezes jd/resume/fit content once locked, without CarouselShell itself
+// ever needing to know `locked` exists — applied unconditionally on
+// `locked`, independent of whether the wrapped stage is currently active.
+function FrozenStageWrapper({ locked, children }: { locked: boolean; children: ReactNode }) {
+  return (
+    <div className={locked ? "opacity-40 pointer-events-none" : undefined} inert={locked}>
+      {children}
+    </div>
+  )
+}
+
 export default function JudgePage() {
-  const [currentStageId, setCurrentStageId] = useState<BlindCallStageId>("jd")
+  // "lock" addresses the lock-interstitial screen for track position only —
+  // it deliberately never enters BlindCallStageId, since the interstitial
+  // is not a Stage.
+  const [currentStageId, setCurrentStageId] = useState<BlindCallStageId | "lock">("jd")
   const [jd, setJd] = useState<JDStageState>(INITIAL_JD_STATE)
   const [hasDirtyRealAskDraft, setHasDirtyRealAskDraft] = useState(false)
   const [hasDirtyNoteDraft, setHasDirtyNoteDraft] = useState(false)
   const [resume, setResume] = useState<ResumeStageState>(INITIAL_RESUME_STATE)
   const [hasDirtyResumeNoteDraft, setHasDirtyResumeNoteDraft] = useState(false)
   const [fit, setFit] = useState<FitStageState>(INITIAL_FIT_STATE)
+  const [locked, setLocked] = useState(false)
+  const [revised, setRevised] = useState<
+    { jd: JDStageState; resume: ResumeStageState; fit: FitStageState } | undefined
+  >(undefined)
+
+  const handleLockForward = useCallback(() => {
+    setRevised(structuredClone({ jd, resume, fit }))
+    setLocked(true)
+    setCurrentStageId("reveal")
+  }, [jd, resume, fit])
 
   const stages: Stage[] = useMemo(
     () =>
@@ -66,12 +91,14 @@ export default function JudgePage() {
             isComplete: () => canAdvanceJDStage(jd, hasDirtyRealAskDraft, hasDirtyNoteDraft),
             blockedMessage: () => jdStageBlockedMessage(hasDirtyRealAskDraft, hasDirtyNoteDraft),
             content: (
-              <JDStageContent
-                jd={jd}
-                onChange={setJd}
-                onRealAskDraftDirtyChange={setHasDirtyRealAskDraft}
-                onNoteDraftDirtyChange={setHasDirtyNoteDraft}
-              />
+              <FrozenStageWrapper locked={locked}>
+                <JDStageContent
+                  jd={jd}
+                  onChange={setJd}
+                  onRealAskDraftDirtyChange={setHasDirtyRealAskDraft}
+                  onNoteDraftDirtyChange={setHasDirtyNoteDraft}
+                />
+              </FrozenStageWrapper>
             ),
           }
         }
@@ -81,11 +108,13 @@ export default function JudgePage() {
             isComplete: () => canAdvanceResumeStage(resume, hasDirtyResumeNoteDraft),
             blockedMessage: () => resumeStageBlockedMessage(hasDirtyResumeNoteDraft),
             content: (
-              <ResumeStageContent
-                resume={resume}
-                onChange={setResume}
-                onNoteDraftDirtyChange={setHasDirtyResumeNoteDraft}
-              />
+              <FrozenStageWrapper locked={locked}>
+                <ResumeStageContent
+                  resume={resume}
+                  onChange={setResume}
+                  onNoteDraftDirtyChange={setHasDirtyResumeNoteDraft}
+                />
+              </FrozenStageWrapper>
             ),
           }
         }
@@ -93,7 +122,11 @@ export default function JudgePage() {
           return {
             ...meta,
             isComplete: () => isFitStageComplete(fit),
-            content: <FitStageContent fit={fit} onChange={setFit} />,
+            content: (
+              <FrozenStageWrapper locked={locked}>
+                <FitStageContent fit={fit} onChange={setFit} />
+              </FrozenStageWrapper>
+            ),
           }
         }
         if (meta.id === "reveal") {
@@ -109,7 +142,7 @@ export default function JudgePage() {
           content: <PlaceholderStage title={`${meta.label} — coming soon`} />,
         }
       }),
-    [jd, hasDirtyRealAskDraft, hasDirtyNoteDraft, resume, hasDirtyResumeNoteDraft, fit]
+    [jd, hasDirtyRealAskDraft, hasDirtyNoteDraft, resume, hasDirtyResumeNoteDraft, fit, locked]
   )
 
   return (
@@ -119,7 +152,18 @@ export default function JudgePage() {
           <CarouselShell
             stages={stages}
             currentStageId={currentStageId}
-            onStageChange={(id) => setCurrentStageId(id as BlindCallStageId)}
+            onStageChange={(id) => setCurrentStageId(id as BlindCallStageId | "lock")}
+            interstitial={{
+              id: "lock",
+              afterStageId: "fit",
+              content: <LockInterstitialContent locked={locked} />,
+              forwardLabel: locked
+                ? undefined
+                : "This will lock your answers — you can still revise them later.",
+              backLabel: locked ? "Answers are already locked" : undefined,
+              blockedMessage: locked ? undefined : "Tap the arrow to lock and continue",
+              onForward: handleLockForward,
+            }}
           />
         </div>
       </main>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { animate, motion, useMotionValue, type PanInfo } from "motion/react"
 import { Toast as ToastPrimitive } from "@base-ui/react/toast"
 
@@ -20,10 +20,34 @@ export type Stage = {
   content: ReactNode
 }
 
+// A screen that renders inline in the track at a fixed position but is
+// deliberately not a Stage: no nav dot, never enters the `stages` array
+// NavDotStrip receives. `blockedMessage` is a plain string (not a lazily
+// evaluated function like Stage.blockedMessage) because the caller already
+// knows synchronously whether forward-drag should be gated — its presence
+// vs. absence is also the sole signal CarouselShell needs to decide whether
+// drag is currently gated here, keeping CarouselShell opaque to *why*.
+export type Interstitial = {
+  id: string
+  afterStageId: string
+  content: ReactNode
+  forwardLabel?: string
+  backLabel?: string
+  blockedMessage?: string
+  onForward: () => void
+}
+
 export type CarouselShellProps = {
   stages: Stage[]
   currentStageId: string
   onStageChange?: (id: string) => void
+  interstitial?: Interstitial
+}
+
+type TrackItem = { kind: "stage"; stage: Stage } | { kind: "interstitial"; interstitial: Interstitial }
+
+function trackItemId(item: TrackItem): string {
+  return item.kind === "stage" ? item.stage.id : item.interstitial.id
 }
 
 const PEEK_THRESHOLD_PX = 56
@@ -31,13 +55,34 @@ const COMMIT_VELOCITY = 500
 const REST_SPRING = { type: "spring", stiffness: 300, damping: 32 } as const
 const REJECT_SPRING = { type: "spring", stiffness: 500, damping: 40 } as const
 
-export function CarouselShell({ stages, currentStageId, onStageChange }: CarouselShellProps) {
+export function CarouselShell({
+  stages,
+  currentStageId,
+  onStageChange,
+  interstitial,
+}: CarouselShellProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [cardWidth, setCardWidth] = useState(0)
   const x = useMotionValue(0)
   const toastManager = ToastPrimitive.useToastManager()
 
-  const currentIndex = stages.findIndex((s) => s.id === currentStageId)
+  // `stages` itself is never mutated — NavDotStrip still receives it
+  // verbatim below, so the interstitial (spliced in only here, for
+  // track/index math) has zero nav-dot footprint.
+  const track: TrackItem[] = useMemo(() => {
+    if (!interstitial) return stages.map((stage) => ({ kind: "stage" as const, stage }))
+    const items: TrackItem[] = []
+    for (const stage of stages) {
+      items.push({ kind: "stage", stage })
+      if (stage.id === interstitial.afterStageId) {
+        items.push({ kind: "interstitial", interstitial })
+      }
+    }
+    return items
+  }, [stages, interstitial])
+
+  const currentIndex = track.findIndex((item) => trackItemId(item) === currentStageId)
+  const currentItem = track[currentIndex]
 
   useEffect(() => {
     const el = containerRef.current
@@ -127,13 +172,19 @@ export function CarouselShell({ stages, currentStageId, onStageChange }: Carouse
   const fireBlockedToast = useCallback(() => {
     const alreadyShowing = toastManager.toasts.some((t) => t.id === BLOCKED_STAGE_TOAST_ID)
     if (alreadyShowing) return
-    const title = stages[currentIndex]?.blockedMessage?.() ?? "A few more answers to go"
+    const item = track[currentIndex]
+    const title =
+      (item?.kind === "interstitial"
+        ? item.interstitial.blockedMessage
+        : item?.kind === "stage"
+          ? item.stage.blockedMessage?.()
+          : undefined) ?? "A few more answers to go"
     toastManager.add({
       id: BLOCKED_STAGE_TOAST_ID,
       title,
       timeout: TOAST_TIMEOUT_MS,
     })
-  }, [toastManager, stages, currentIndex])
+  }, [toastManager, track, currentIndex])
 
   const handleDragEnd = useCallback(
     (_event: PointerEvent | MouseEvent | TouchEvent, info: PanInfo) => {
@@ -148,43 +199,65 @@ export function CarouselShell({ stages, currentStageId, onStageChange }: Carouse
       }
 
       if (offset < 0) {
-        // Dragged left = forward, gated by the current stage's isComplete().
-        const next = stages[currentIndex + 1]
-        if (!next) {
+        // Dragged left = forward. Gated by the current stage's isComplete()
+        // — or, at the interstitial, by whether the caller still considers
+        // it locked (interstitial.blockedMessage present pre-lock; absent
+        // once locked, since there's nothing left to accidentally trigger).
+        // Forward-drag past the interstitial is deliberately never allowed
+        // to commit the lock itself — only the labeled arrow tap can, via
+        // commitForward below — so a fast swipe can't blow past the warning
+        // copy the reviewer never had to read.
+        const item = track[currentIndex]
+        const next = track[currentIndex + 1]
+        if (!item || !next) {
           settle()
           return
         }
-        if (stages[currentIndex].isComplete()) {
-          onStageChange?.(next.id)
+        if (item.kind === "interstitial") {
+          if (item.interstitial.blockedMessage !== undefined) {
+            settle()
+            fireBlockedToast()
+          } else {
+            onStageChange?.(trackItemId(next))
+          }
+          return
+        }
+        if (item.stage.isComplete()) {
+          onStageChange?.(trackItemId(next))
         } else {
           settle()
           fireBlockedToast()
         }
       } else {
         // Dragged right = backward, always unconditional — never gated.
-        const prev = stages[currentIndex - 1]
+        const prev = track[currentIndex - 1]
         if (!prev) {
           settle()
           return
         }
-        onStageChange?.(prev.id)
+        onStageChange?.(trackItemId(prev))
       }
     },
-    [stages, currentIndex, onStageChange, settle, fireBlockedToast]
+    [track, currentIndex, onStageChange, settle, fireBlockedToast]
   )
 
   const commitForward = useCallback(() => {
-    const next = stages[currentIndex + 1]
-    if (next) onStageChange?.(next.id)
-  }, [stages, currentIndex, onStageChange])
+    const item = track[currentIndex]
+    if (item?.kind === "interstitial") {
+      item.interstitial.onForward()
+      return
+    }
+    const next = track[currentIndex + 1]
+    if (next) onStageChange?.(trackItemId(next))
+  }, [track, currentIndex, onStageChange])
 
   const commitBackward = useCallback(() => {
-    const prev = stages[currentIndex - 1]
-    if (prev) onStageChange?.(prev.id)
-  }, [stages, currentIndex, onStageChange])
+    const prev = track[currentIndex - 1]
+    if (prev) onStageChange?.(trackItemId(prev))
+  }, [track, currentIndex, onStageChange])
 
-  const current = stages[currentIndex]
-  const nextDisabled = !current?.isComplete()
+  const nextDisabled =
+    currentItem?.kind === "interstitial" ? false : !currentItem?.stage.isComplete()
   const prevDisabled = currentIndex === 0
 
   // Framer Motion's drag="x" listens for pointerdown on this track's own DOM
@@ -217,10 +290,19 @@ export function CarouselShell({ stages, currentStageId, onStageChange }: Carouse
     }
   }, [])
 
+  // NavDotStrip only ever sees the real `stages` array + a plain id — it
+  // has no notion the interstitial exists. While parked there, it's handed
+  // afterStageId instead of the interstitial's own id, so the dot for the
+  // stage just before it (e.g. "fit") simply stays lit as current rather
+  // than every dot dropping to "incomplete" (which is what a literal,
+  // unmatched id would produce, since NavDotStrip's `findIndex` returns -1).
+  const navDotStageId =
+    currentItem?.kind === "interstitial" ? currentItem.interstitial.afterStageId : currentStageId
+
   return (
     <div className="flex w-full flex-col gap-4">
-      <NavDotStrip stages={stages} currentStageId={currentStageId} />
-      <div ref={containerRef} className="w-full overflow-hidden">
+      <NavDotStrip stages={stages} currentStageId={navDotStageId} />
+      <div ref={containerRef} data-testid="carousel-viewport" className="w-full overflow-hidden">
         <motion.div
           data-testid="carousel-track"
           className="flex flex-row"
@@ -230,12 +312,13 @@ export function CarouselShell({ stages, currentStageId, onStageChange }: Carouse
           dragMomentum={false}
           onDragEnd={handleDragEnd}
         >
-          {stages.map((stage) => {
-            const isActive = stage.id === currentStageId
+          {track.map((item) => {
+            const id = trackItemId(item)
+            const isActive = id === currentStageId
             return (
               <div
-                key={stage.id}
-                data-blind-call-stage={stage.id}
+                key={id}
+                data-blind-call-stage={id}
                 // Marker attribute only — nothing reads data-active as a CSS selector.
                 data-active={isActive || undefined}
                 aria-hidden={!isActive}
@@ -243,7 +326,7 @@ export function CarouselShell({ stages, currentStageId, onStageChange }: Carouse
                 onPointerDownCapture={stopDragOnInteractive}
                 className="w-full shrink-0"
               >
-                {stage.content}
+                {item.kind === "stage" ? item.stage.content : item.interstitial.content}
               </div>
             )
           })}
@@ -254,6 +337,8 @@ export function CarouselShell({ stages, currentStageId, onStageChange }: Carouse
         onNext={commitForward}
         prevDisabled={prevDisabled}
         nextDisabled={nextDisabled}
+        forwardLabel={currentItem?.kind === "interstitial" ? currentItem.interstitial.forwardLabel : undefined}
+        backLabel={currentItem?.kind === "interstitial" ? currentItem.interstitial.backLabel : undefined}
       />
     </div>
   )
