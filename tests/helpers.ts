@@ -154,3 +154,19 @@ export async function reachLockInterstitial(page: Page) {
   )
   await waitForTrackSettled(page)
 }
+
+// Completes the flow through locking + Reveal and lands on Revise's recap
+// sub-view. Two "Next stage" clicks past reachLockInterstitial: the first
+// commits the lock (interstitial's onForward — seeds `revised`, sets
+// currentStageId to "reveal"), the second is a normal stage-advance from
+// Reveal to Revise.
+export async function reachRevisedState(page: Page) {
+  await reachLockInterstitial(page)
+  await page.getByRole("button", { name: "Next stage" }).click()
+  await page.getByRole("button", { name: "Next stage" }).click()
+  await expect(page.locator('[data-blind-call-stage="revise"]')).toHaveAttribute(
+    "data-active",
+    "true"
+  )
+  await waitForTrackSettled(page)
+}
