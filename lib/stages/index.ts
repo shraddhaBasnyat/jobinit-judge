@@ -11,10 +11,14 @@ export {
   archetypeKeyForLabel,
   FIT_VERDICT_OPTIONS,
   SCENARIO_LABELS,
+  ASSESS_VALUE_META,
+  describeAssessValue,
   type BlindCallStageId,
   type BlindCallState,
   type RoleArchetype,
   type FitVerdict,
+  type AssessValue,
+  type RevisedState,
 } from "@/lib/stages/blind-call"
 
 export {
@@ -32,3 +36,10 @@ export {
   describeCandidateArchetype,
   candidateArchetypePillLabel,
 } from "@/lib/stages/reveal"
+
+export {
+  isReviseStageComplete,
+  canAdvanceReviseStage,
+  reviseStageBlockedMessage,
+  type ReviseField,
+} from "@/lib/stages/revise"

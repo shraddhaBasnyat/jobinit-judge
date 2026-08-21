@@ -1,24 +1,24 @@
-import { BadgeCheck, MessageSquareQuote, ThumbsDown, type LucideIcon } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { RadioGroup } from "@base-ui/react/radio-group"
 
 import { CardContentRow } from "@/components/blind-call/CardContentRow"
 import { AssessOptionRadio } from "@/components/blind-call/AssessOption"
+import { ASSESS_VALUE_META, type AssessValue } from "@/lib/stages/blind-call"
 
 export type AssessOption = {
-  value: "backedUp" | "allTalk" | "soWhat"
+  value: AssessValue
   icon: LucideIcon
   label: string
 }
 
-// Domain-agnostic scale data, not case-specific content (unlike the
-// statements themselves, which live in lib/mock-data/case.ts) — colocated
-// with its own type here, same reasoning as ARCHETYPE_LABELS sitting next to
-// RoleArchetype in lib/stages/jd.ts.
-export const ASSESS_OPTIONS: AssessOption[] = [
-  { value: "backedUp", icon: BadgeCheck, label: "Backed Up" },
-  { value: "allTalk", icon: MessageSquareQuote, label: "All Talk" },
-  { value: "soWhat", icon: ThumbsDown, label: "So What" },
-]
+// Derived from ASSESS_VALUE_META (lib/stages/blind-call.ts) rather than
+// hand-authored, so the value->icon/label mapping has one source of truth —
+// relocated there in Ticket 22 so the recap's describeAssessValue selector
+// can share it. Key order in that map is load-bearing for this array's
+// order (see its own comment).
+export const ASSESS_OPTIONS: AssessOption[] = (
+  Object.entries(ASSESS_VALUE_META) as [AssessValue, { icon: LucideIcon; label: string }][]
+).map(([value, meta]) => ({ value, ...meta }))
 
 export type Statement = {
   id: string

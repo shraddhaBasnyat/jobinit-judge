@@ -10,6 +10,20 @@ export function isMultiSelectWithNoteComplete(value: MultiSelectWithNoteValue): 
   return value.selected.length > 0 || Boolean(value.note?.trim())
 }
 
+// Recap-only helper (Ticket 22), shared by JD and Resume archetype recap
+// rows. Takes already-resolved label strings, matching this component's own
+// `selected` prop convention — never raw RoleArchetype keys, which would
+// import a domain enum into an otherwise domain-agnostic component.
+// Fallback is deliberately short ("None selected," not a full sentence) —
+// this renders inside a pill-variant CardContentRow alongside real selected
+// labels like "Modernization"/"Greenfield Builder," so a full sentence would
+// be visibly out of place in that slot. FLAG: this empty-selection state
+// isn't covered by the ticket's structural facts — confirm against Figma
+// before shipping.
+export function describeSelection(selectedLabels: string[]): string[] {
+  return selectedLabels.length > 0 ? selectedLabels : ["None selected"]
+}
+
 export type MultiSelectWithNoteProps = {
   title: string
   instructionLabel: string

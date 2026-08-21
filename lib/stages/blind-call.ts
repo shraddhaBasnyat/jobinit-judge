@@ -1,3 +1,5 @@
+import { BadgeCheck, MessageSquareQuote, ThumbsDown, type LucideIcon } from "lucide-react"
+
 import type { JDStageState } from "@/lib/stages/jd"
 import type { ResumeStageState } from "@/lib/stages/resume"
 import type { FitStageState } from "@/lib/stages/fit"
@@ -79,7 +81,25 @@ export const SCENARIO_LABELS: Record<string, string> = Object.fromEntries(
   FIT_VERDICT_OPTIONS.map((option) => [option.id, option.label])
 )
 
+export type AssessValue = "backedUp" | "allTalk" | "soWhat"
+
+// Order is load-bearing: StatementAssess.tsx derives its ASSESS_OPTIONS
+// array from Object.entries(ASSESS_VALUE_META), and that array's order
+// drives the legend's left-to-right display ("Backed Up / All Talk / So
+// What").
+export const ASSESS_VALUE_META: Record<AssessValue, { icon: LucideIcon; label: string }> = {
+  backedUp: { icon: BadgeCheck, label: "Backed Up" },
+  allTalk: { icon: MessageSquareQuote, label: "All Talk" },
+  soWhat: { icon: ThumbsDown, label: "So What" },
+}
+
+export function describeAssessValue(value: AssessValue) {
+  return ASSESS_VALUE_META[value]
+}
+
 export type BlindCallStageId = "jd" | "resume" | "fit" | "reveal" | "revise" | "done"
+
+export type RevisedState = { jd: JDStageState; resume: ResumeStageState; fit: FitStageState }
 
 export type BlindCallState = {
   currentStageId: BlindCallStageId
@@ -88,10 +108,10 @@ export type BlindCallState = {
   fit: FitStageState
   // reveal — deliberately no field: it's pure read-only display of AI
   // ground truth (MOCK_CASE.reveal), no reviewer-editable state to hold.
-  // revise / done — no fields yet, no ticket builds these; render as
-  // placeholder stage content until they have real tickets.
+  // done — no fields yet, no ticket builds this; renders as placeholder
+  // stage content until it has a real ticket.
   locked: boolean
-  revised?: { jd: JDStageState; resume: ResumeStageState; fit: FitStageState }
+  revised?: RevisedState
 }
 
 export const STAGE_META: { id: BlindCallStageId; label: string }[] = [

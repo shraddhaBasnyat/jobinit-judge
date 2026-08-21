@@ -9,6 +9,7 @@ import { ResumeStageContent } from "@/components/blind-call/ResumeStageContent"
 import { FitStageContent } from "@/components/blind-call/FitStageContent"
 import { RevealStageContent } from "@/components/blind-call/RevealStageContent"
 import { LockInterstitialContent } from "@/components/blind-call/LockInterstitialContent"
+import { ReviseStageContent } from "@/components/blind-call/ReviseStageContent"
 import {
   STAGE_META,
   canAdvanceJDStage,
@@ -17,10 +18,13 @@ import {
   resumeStageBlockedMessage,
   isFitStageComplete,
   isRevealStageComplete,
+  canAdvanceReviseStage,
+  reviseStageBlockedMessage,
   type BlindCallStageId,
   type JDStageState,
   type ResumeStageState,
   type FitStageState,
+  type RevisedState,
 } from "@/lib/stages"
 import { MOCK_CASE } from "@/lib/mock-data/case"
 
@@ -72,15 +76,24 @@ export default function JudgePage() {
   const [hasDirtyResumeNoteDraft, setHasDirtyResumeNoteDraft] = useState(false)
   const [fit, setFit] = useState<FitStageState>(INITIAL_FIT_STATE)
   const [locked, setLocked] = useState(false)
-  const [revised, setRevised] = useState<
-    { jd: JDStageState; resume: ResumeStageState; fit: FitStageState } | undefined
-  >(undefined)
+  const [revised, setRevised] = useState<RevisedState | undefined>(undefined)
+  const [isRevising, setIsRevising] = useState(false)
 
   const handleLockForward = useCallback(() => {
     setRevised(structuredClone({ jd, resume, fit }))
     setLocked(true)
     setCurrentStageId("reveal")
   }, [jd, resume, fit])
+
+  // Resets isRevising in the same event handler that moves the reviewer off
+  // "revise" (rather than an effect watching for the change) — the
+  // React-recommended way to sync state to an event, not a useEffect. Fires
+  // regardless of which nav path was used (button or drag), since both flow
+  // through CarouselShell's onStageChange.
+  const handleStageChange = useCallback((id: string) => {
+    setCurrentStageId(id as BlindCallStageId | "lock")
+    if (id !== "revise") setIsRevising(false)
+  }, [])
 
   const stages: Stage[] = useMemo(
     () =>
@@ -136,13 +149,43 @@ export default function JudgePage() {
             content: <RevealStageContent reveal={MOCK_CASE.reveal} />,
           }
         }
+        if (meta.id === "revise") {
+          return {
+            ...meta,
+            isComplete: () => canAdvanceReviseStage(isRevising),
+            blockedMessage: () => reviseStageBlockedMessage(isRevising),
+            // No FrozenStageWrapper here, deliberately — Revise is the one
+            // place still interactive post-lock.
+            content: revised ? (
+              <ReviseStageContent
+                key={currentStageId === "revise" ? "revise-active" : "revise-inactive"}
+                revised={revised}
+                onRevisedChange={setRevised}
+                onEditModeChange={setIsRevising}
+              />
+            ) : (
+              <PlaceholderStage title="Revise" />
+            ),
+          }
+        }
         return {
           ...meta,
           isComplete: () => false,
           content: <PlaceholderStage title={`${meta.label} — coming soon`} />,
         }
       }),
-    [jd, hasDirtyRealAskDraft, hasDirtyNoteDraft, resume, hasDirtyResumeNoteDraft, fit, locked]
+    [
+      jd,
+      hasDirtyRealAskDraft,
+      hasDirtyNoteDraft,
+      resume,
+      hasDirtyResumeNoteDraft,
+      fit,
+      locked,
+      revised,
+      isRevising,
+      currentStageId,
+    ]
   )
 
   return (
@@ -152,7 +195,7 @@ export default function JudgePage() {
           <CarouselShell
             stages={stages}
             currentStageId={currentStageId}
-            onStageChange={(id) => setCurrentStageId(id as BlindCallStageId | "lock")}
+            onStageChange={handleStageChange}
             interstitial={{
               id: "lock",
               afterStageId: "fit",

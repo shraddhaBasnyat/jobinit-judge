@@ -18,6 +18,26 @@ export function isBranchingSingleSelectComplete(
   return true
 }
 
+export type BranchingSelectionDescription = {
+  label: string
+  hook: string
+  subLabel?: string
+  subHook?: string
+}
+
+// Recap-only helper (Ticket 22). Named describeBranchingSelection, not
+// describeSelection, to avoid colliding with MultiSelectWithNote's
+// same-named, different-signature recap helper.
+export function describeBranchingSelection(
+  options: SelectOption[],
+  value: BranchingSingleSelectValue
+): BranchingSelectionDescription | undefined {
+  const selected = options.find((o) => o.id === value.selectedId)
+  if (!selected) return undefined
+  const sub = selected.subOptions?.find((s) => s.id === value.selectedSubId)
+  return { label: selected.label, hook: selected.hook, subLabel: sub?.label, subHook: sub?.hook }
+}
+
 export type BranchingSingleSelectProps = {
   title: string
   options: SelectOption[]

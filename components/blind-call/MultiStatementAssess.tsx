@@ -1,9 +1,32 @@
+import type { LucideIcon } from "lucide-react"
+
 import { AssessOptionLegend } from "@/components/blind-call/AssessOption"
 import {
   StatementAssess,
   type AssessOption,
   type Statement,
 } from "@/components/blind-call/StatementAssess"
+import { describeAssessValue, type AssessValue } from "@/lib/stages/blind-call"
+
+export type StatementAssessDescription = {
+  id: string
+  statement: string
+  icon: LucideIcon
+  label: string
+}
+
+// Recap-only helper (Ticket 22). By the time Revise is reachable, resume was
+// locked complete, so every statement always has a value — the values[s.id]
+// lookup is defensive typing, not an expected runtime path.
+export function describeStatementAssess(
+  values: Record<string, string>,
+  statements: Statement[]
+): StatementAssessDescription[] {
+  return statements.map((s) => {
+    const meta = describeAssessValue(values[s.id] as AssessValue)
+    return { id: s.id, statement: s.statement, icon: meta.icon, label: meta.label }
+  })
+}
 
 export type MultiStatementAssessProps = {
   question: string
