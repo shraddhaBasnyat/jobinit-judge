@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test"
 
-import { isReviseStageComplete, canAdvanceReviseStage, reviseStageBlockedMessage } from "@/lib/stages"
 import {
   dragCarousel,
   forceJDComplete,
@@ -8,37 +7,12 @@ import {
   reachRevisedState,
 } from "./helpers"
 
-test.describe("isReviseStageComplete", () => {
-  test("always true", () => {
-    expect(isReviseStageComplete()).toBe(true)
-  })
-})
-
-test.describe("canAdvanceReviseStage", () => {
-  test("true when not editing", () => {
-    expect(canAdvanceReviseStage(false)).toBe(true)
-  })
-
-  test("false when editing", () => {
-    expect(canAdvanceReviseStage(true)).toBe(false)
-  })
-})
-
-test.describe("reviseStageBlockedMessage", () => {
-  test("returns copy when editing", () => {
-    expect(reviseStageBlockedMessage(true)).toBe("Save or cancel your changes before continuing")
-  })
-
-  test("undefined when not editing", () => {
-    expect(reviseStageBlockedMessage(false)).toBeUndefined()
-  })
-})
-
-// CarouselShell mounts every stage panel in the DOM at once (inert when not
-// active) — once `revised` exists, Revise-editing renders a second copy of
-// several shared field components (InputWithButton, MultiSelectWithNote,
-// BranchingSingleSelect), so their testids collide with the original
-// jd/resume/fit panels' own copies unless scoped to
+// CarouselShell mounts every REACHED stage panel in the DOM (inert when not
+// active) and never un-mounts one once reached — once `revised` exists,
+// Revise-editing renders a second copy of several shared field components
+// (InputWithButton, MultiSelectWithNote, BranchingSingleSelect), so their
+// testids collide with the original jd/resume/fit panels' own copies
+// (still mounted, just frozen) unless scoped to
 // [data-blind-call-stage="revise"] first, same reasoning already documented
 // in helpers.ts/card-content-row.spec.ts for the pre-existing jd/resume
 // collision.
@@ -72,7 +46,7 @@ test.describe("Revise recap", () => {
       "data-active",
       "true"
     )
-    await page.getByRole("button", { name: "Next stage" }).click() // lock -> reveal
+    await page.getByTestId("lock-interstitial-content-commit").click() // lock -> reveal
     await page.getByRole("button", { name: "Next stage" }).click() // reveal -> revise
 
     const panel = page.locator('[data-blind-call-stage="revise"]')
@@ -80,12 +54,12 @@ test.describe("Revise recap", () => {
     await expect(panel.getByTestId("card-content-row").last()).toContainText("Fit Sub-option")
   })
 
-  test("forward button is enabled immediately on entry; NavDotStrip shows Revise as the 5th of 6 dots", async ({
+  test("forward button is disabled on entry — 'done' isn't mounted until the commit button is tapped", async ({
     page,
   }) => {
     await page.goto("/judge")
     await reachRevisedState(page)
-    await expect(page.getByRole("button", { name: "Next stage" })).toBeEnabled()
+    await expect(page.getByRole("button", { name: "Next stage" })).toBeDisabled()
 
     const dots = page.getByTestId("nav-dot-strip").locator(":scope > span")
     await expect(dots).toHaveCount(6)
@@ -141,7 +115,9 @@ test.describe("Revise-editing — live mutation, no draft layer", () => {
 })
 
 test.describe("Revise-editing — forward/backward nav", () => {
-  test("forward nav is blocked (disabled button + toast) while editing", async ({ page }) => {
+  test("forward nav stays disabled throughout editing — 'done' still isn't mounted", async ({
+    page,
+  }) => {
     await page.goto("/judge")
     await reachRevisedState(page)
     await page.getByTestId("revise-stage-content-start-editing").click()
@@ -150,8 +126,12 @@ test.describe("Revise-editing — forward/backward nav", () => {
     await expect(next).toBeDisabled()
     await expect(next).toHaveAttribute("aria-disabled", "true")
 
+    // The commit button that would mount+advance to "done" only exists in
+    // the recap sub-view — structurally unreachable while editing, not a
+    // separate gate that needs its own toast.
+    await expect(page.getByTestId("revise-stage-content-commit-done")).toHaveCount(0)
+
     await dragCarousel(page, -200)
-    await expect(page.getByText("Save or cancel your changes before continuing")).toBeVisible()
     await expect(page.locator('[data-blind-call-stage="revise"]')).toHaveAttribute(
       "data-active",
       "true"
@@ -170,7 +150,7 @@ test.describe("Revise-editing — forward/backward nav", () => {
     )
   })
 
-  test("leaving editing via back-arrow without Cancel/Save still shows recap on re-entry", async ({
+  test("leaving editing via back-arrow without Cancel/Save still shows recap on re-entry; forward stays disabled — leaving edit mode alone never enables it", async ({
     page,
   }) => {
     await page.goto("/judge")
@@ -187,8 +167,106 @@ test.describe("Revise-editing — forward/backward nav", () => {
     )
     await expect(page.getByTestId("revise-stage-content-recap")).toBeVisible()
     await expect(page.getByTestId("revise-stage-content-editing")).toHaveCount(0)
-    // Forward nav is unblocked again too — the exit effect cleared isRevising.
-    await expect(page.getByRole("button", { name: "Next stage" })).toBeEnabled()
+    // Forward stays disabled — nothing about leaving editing mounts "done".
+    // Only the explicit commit button does that.
+    await expect(page.getByRole("button", { name: "Next stage" })).toBeDisabled()
+  })
+})
+
+// Revise has no draft layer per field (every tap mutates `revised` directly,
+// immediately) and backward nav is unconditional everywhere in this app, so
+// an open, unsaved edit session must be discarded on ANY exit, not just an
+// explicit Cancel tap — otherwise an abandoned edit sits in `revised`
+// permanently the moment the reviewer navigates away. This generalizes what
+// used to be a narrow, Fit-specific gate (select narrative_gap, get blocked
+// from Saving/committing past it) into something structural: the original
+// bug can no longer produce an incomplete `revised` in the first place,
+// regardless of which field or how the reviewer left.
+test.describe("Revise-editing — any exit discards an open, unsaved session", () => {
+  test("leaving via back-nav (not Save, not Cancel) mid-edit discards the abandoned edit, same as Cancel would", async ({
+    page,
+  }) => {
+    await page.goto("/judge")
+    await reachRevisedState(page)
+    const panel = page.locator('[data-blind-call-stage="revise"]')
+    const beforeRows = await panel.getByTestId("card-content-row").allTextContents()
+
+    await page.getByTestId("revise-stage-content-start-editing").click()
+    // forceJDComplete already selected "Specialist Depth" — toggle it off,
+    // an edit that would visibly change the recap if it survived.
+    await panel.getByTestId("multi-select-with-note-pill-Specialist Depth").first().click()
+
+    await page.getByRole("button", { name: "Previous stage" }).click()
+    await expect(page.locator('[data-blind-call-stage="reveal"]')).toHaveAttribute(
+      "data-active",
+      "true"
+    )
+    await page.getByRole("button", { name: "Next stage" }).click()
+    await expect(page.locator('[data-blind-call-stage="revise"]')).toHaveAttribute(
+      "data-active",
+      "true"
+    )
+
+    await expect(panel.getByTestId("revise-stage-content-recap")).toBeVisible()
+    const afterRows = await panel.getByTestId("card-content-row").allTextContents()
+    expect(afterRows).toEqual(beforeRows)
+  })
+
+  test("sitting on recap with no open edit session, back-nav touches nothing in revised", async ({
+    page,
+  }) => {
+    await page.goto("/judge")
+    await reachRevisedState(page)
+    const panel = page.locator('[data-blind-call-stage="revise"]')
+    const beforeRows = await panel.getByTestId("card-content-row").allTextContents()
+
+    // No "Let me change something" tap here — no session is open.
+    await page.getByRole("button", { name: "Previous stage" }).click()
+    await expect(page.locator('[data-blind-call-stage="reveal"]')).toHaveAttribute(
+      "data-active",
+      "true"
+    )
+    await page.getByRole("button", { name: "Next stage" }).click()
+
+    const afterRows = await panel.getByTestId("card-content-row").allTextContents()
+    expect(afterRows).toEqual(beforeRows)
+  })
+
+  // The original bug this whole mechanism replaced: select narrative_gap,
+  // leave without picking a sub-option, via back-nav specifically (the path
+  // that bypassed Save's now-removed Fit-specific gate entirely). Confirms
+  // this is structurally impossible now, not just gated — the underlying
+  // `revised.fit.verdict` itself never ends up in the incomplete shape,
+  // because the whole edit (not just the Fit field) is discarded on exit.
+  test("narrative_gap selected with no sub-option, left via back-nav, cannot produce an incomplete revised.fit — the whole edit is discarded, not gated", async ({
+    page,
+  }) => {
+    await page.goto("/judge")
+    await reachRevisedState(page)
+    const panel = page.locator('[data-blind-call-stage="revise"]')
+    const beforeRows = await panel.getByTestId("card-content-row").allTextContents()
+
+    await page.getByTestId("revise-stage-content-start-editing").click()
+    await panel.getByTestId("radio-card-narrative_gap").click()
+    await page.getByRole("button", { name: "Previous stage" }).click()
+    await page.getByRole("button", { name: "Next stage" }).click()
+
+    await expect(panel.getByTestId("revise-stage-content-recap")).toBeVisible()
+    const afterRows = await panel.getByTestId("card-content-row").allTextContents()
+    expect(afterRows).toEqual(beforeRows)
+    // No trace of narrative_gap, complete or otherwise.
+    for (const row of afterRows) expect(row).not.toContain("Narrative gap")
+
+    // Not just the recap display — the underlying data itself reverted.
+    // Re-entering editing must show the original verdict selected, not
+    // narrative_gap lingering underneath a correct-looking recap.
+    await page.getByTestId("revise-stage-content-start-editing").click()
+    await expect(
+      panel.getByTestId("revise-stage-content-editing").getByTestId("radio-card-confirmed_fit")
+    ).toHaveAttribute("aria-checked", "true")
+    await expect(
+      panel.getByTestId("revise-stage-content-editing").getByTestId("radio-card-narrative_gap")
+    ).toHaveAttribute("aria-checked", "false")
   })
 })
 
@@ -280,5 +358,27 @@ test.describe("Revise-editing — Save blocked by an uncommitted draft", () => {
 
     await jdNoteField.blur()
     await expect(save).toBeEnabled()
+  })
+})
+
+test.describe("Revise — commit-done button", () => {
+  test("'I commit to this, I'm done' mounts 'done' and advances to it in one action, purely a track-advance, no data write", async ({
+    page,
+  }) => {
+    await page.goto("/judge")
+    await reachRevisedState(page)
+    const panel = page.locator('[data-blind-call-stage="revise"]')
+    const beforeText = await panel.getByTestId("card-content-row").first().textContent()
+
+    await page.getByTestId("revise-stage-content-commit-done").click()
+    await expect(page.locator('[data-blind-call-stage="done"]')).toHaveAttribute(
+      "data-active",
+      "true"
+    )
+
+    // Purely a track-advance — no data work, so backing up shows the exact
+    // same recap content as before the button was tapped.
+    await page.getByRole("button", { name: "Previous stage" }).click()
+    await expect(panel.getByTestId("card-content-row").first()).toHaveText(beforeText ?? "")
   })
 })

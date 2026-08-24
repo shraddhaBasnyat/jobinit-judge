@@ -9,18 +9,11 @@ import { MultiSelectWithNote } from "@/components/blind-call/MultiSelectWithNote
 export type JDStageContentProps = {
   jd: JDStageState
   onChange: (next: JDStageState) => void
-  onRealAskDraftDirtyChange?: (isDirty: boolean) => void
-  onNoteDraftDirtyChange?: (isDirty: boolean) => void
 }
 
 // Ticket 2 built the real badge/team content below; Ticket 3 built the real
 // InputWithButton below; Ticket 4 built the real MultiSelectWithNote below.
-export function JDStageContent({
-  jd,
-  onChange,
-  onRealAskDraftDirtyChange,
-  onNoteDraftDirtyChange,
-}: JDStageContentProps) {
+export function JDStageContent({ jd, onChange }: JDStageContentProps) {
   const archetypeOptions = Object.values(ARCHETYPE_LABELS)
   const selectedLabels = jd.archetype.selected.map((key) => ARCHETYPE_LABELS[key])
 
@@ -60,13 +53,11 @@ export function JDStageContent({
         onNoteChange={(customNote) =>
           onChange({ ...jd, archetype: { ...jd.archetype, customNote } })
         }
-        onNoteDraftDirtyChange={onNoteDraftDirtyChange}
       />
       <InputWithButton
         title="Underneath the requirements list, what's the real problem this role exists to solve?"
         value={jd.realAsk.value}
         onAdd={(value) => onChange({ ...jd, realAsk: { value } })}
-        onDraftDirtyChange={onRealAskDraftDirtyChange}
         placeholder="Add the job description's real ask"
       />
     </div>

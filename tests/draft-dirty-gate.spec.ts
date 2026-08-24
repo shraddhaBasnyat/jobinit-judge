@@ -1,100 +1,86 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Locator } from "@playwright/test"
 
-import { dragCarousel, forceJDComplete, forceResumeComplete } from "./helpers"
+import { forceJDComplete, resolveClassBackground, resolveColorVar } from "./helpers"
 
-test.describe("Draft-dirty forward-nav gate", () => {
-  test("Next disables when jd is complete but the real-ask draft is unsaved, re-enables once Added", async ({
+// Resolves the wrapper div's actual computed border-color/background-color
+// (not a className assertion) — comparing computed style to computed style,
+// consistent with this suite's existing convention (see
+// resolveColorVar/resolveClassBackground's own comments in helpers.ts).
+async function fieldWrapperStyle(fieldLocator: Locator) {
+  return fieldLocator.evaluate((el) => {
+    const wrapper = el.parentElement!
+    const cs = getComputedStyle(wrapper)
+    return { borderColor: cs.borderColor, backgroundColor: cs.backgroundColor }
+  })
+}
+
+test.describe("Dirty-draft visual treatment — fully decoupled from navigation", () => {
+  test("Real Ask field: clean by default, shows the warning treatment while dirty, clears once Added", async ({
     page,
   }) => {
     await page.goto("/judge")
-    await forceJDComplete(page)
+    const field = page.getByTestId("input-with-button-field")
+    const warningBorder = await resolveColorVar(page, "--warning")
+    const warningBg = await resolveClassBackground(page, "bg-warning-bg")
+    const defaultBorder = await resolveColorVar(page, "--input")
+    const defaultBg = await resolveColorVar(page, "--background")
 
-    const next = page.getByRole("button", { name: "Next stage" })
-    await expect(next).toBeEnabled()
+    let style = await fieldWrapperStyle(field)
+    expect(style.borderColor).toBe(defaultBorder)
+    expect(style.backgroundColor).toBe(defaultBg)
 
-    await page.getByTestId("input-with-button-field").fill("A brand new unsaved edit")
-    await expect(next).toBeDisabled()
-    await expect(next).toHaveAttribute("aria-disabled", "true")
-
-    // isJDStageComplete itself staying true here (unaffected by draft
-    // dirtiness) has no remaining UI hook to assert against directly, now
-    // that jd-stage-complete-status is gone — see tests/stages.spec.ts for
-    // a direct unit test of that AND composition instead.
+    await field.fill("A brand new unsaved edit")
+    style = await fieldWrapperStyle(field)
+    expect(style.borderColor).toBe(warningBorder)
+    expect(style.backgroundColor).toBe(warningBg)
 
     await page.getByTestId("input-with-button-add").click()
-    await expect(next).toBeEnabled()
+    style = await fieldWrapperStyle(field)
+    expect(style.borderColor).toBe(defaultBorder)
+    expect(style.backgroundColor).toBe(defaultBg)
   })
 
-  test("blocked forward drag with a dirty draft shows the draft-specific toast copy, not the generic completion message", async ({
+  test("JD Archetype note field: warning treatment while dirty, checkmark and warning treatment are mutually exclusive", async ({
     page,
   }) => {
     await page.goto("/judge")
-    await forceJDComplete(page)
-    await page.getByTestId("input-with-button-field").fill("A brand new unsaved edit")
-
-    await dragCarousel(page, -200)
-
-    await expect(
-      page.getByText("You have an unsaved draft — tap Add or clear it before continuing")
-    ).toBeVisible()
-    await expect(page.getByText("A few more answers to go")).toHaveCount(0)
-  })
-
-  test("Next disables when jd is complete but the archetype note draft is unsaved, re-enables once blurred", async ({
-    page,
-  }) => {
-    await page.goto("/judge")
-    await forceJDComplete(page)
-
-    const next = page.getByRole("button", { name: "Next stage" })
-    await expect(next).toBeEnabled()
-
-    // Scoped to the jd panel — resume also renders a MultiSelectWithNote
-    // instance now, so an unscoped note-field testid is ambiguous.
     const jdPanel = page.locator('[data-blind-call-stage="jd"]')
-    await jdPanel.getByTestId("multi-select-with-note-note-field").fill("An unsaved note edit")
-    await expect(next).toBeDisabled()
-    await expect(next).toHaveAttribute("aria-disabled", "true")
+    const noteField = jdPanel.getByTestId("multi-select-with-note-note-field")
+    const checkmark = jdPanel.getByTestId("multi-select-with-note-note-checkmark")
+    const warningBorder = await resolveColorVar(page, "--warning")
 
-    await jdPanel.getByTestId("multi-select-with-note-note-field").blur()
-    await expect(next).toBeEnabled()
+    await expect(checkmark).toHaveCSS("opacity", "0")
+
+    await noteField.fill("An unsaved note edit")
+    let style = await fieldWrapperStyle(noteField)
+    expect(style.borderColor).toBe(warningBorder)
+    await expect(checkmark).toHaveCSS("opacity", "0") // still not committed
+
+    await noteField.blur()
+    style = await fieldWrapperStyle(noteField)
+    const defaultBorder = await resolveColorVar(page, "--input")
+    expect(style.borderColor).toBe(defaultBorder)
+    await expect(checkmark).toHaveCSS("opacity", "1") // committed now, checkmark takes over
   })
 
-  // No drag-based "blocked toast" test for the note field, unlike realAsk
-  // above — verified empirically that neither mouse-drag approach can reach
-  // that state: starting the drag from the carousel track's center (like
-  // dragCarousel) blurs-and-commits the still-focused note field before the
-  // drag is ever evaluated (mousedown on any other element blurs it, and
-  // this field commits on blur); starting the drag from the field itself
-  // gets captured entirely by the browser's native text-selection drag
-  // instead of ever reaching CarouselShell's pan gesture (confirmed via the
-  // track's transform never changing and the field's full text ending up
-  // selected). realAsk doesn't have this problem because it only commits on
-  // an explicit Add click, so a drag from the track's center leaves it
-  // genuinely dirty. The dirty-gate logic itself and jdStageBlockedMessage's
-  // note-specific copy are still fully covered — see tests/stages.spec.ts.
-
-  test("Next disables when resume is complete but the archetype note draft is unsaved, re-enables once blurred", async ({
+  test("a reviewer can knowingly navigate forward with a dirty draft — the warning is visual only, never a navigation gate", async ({
     page,
   }) => {
     await page.goto("/judge")
     await forceJDComplete(page)
-    await page.getByRole("button", { name: "Next stage" }).click()
-    await forceResumeComplete(page)
 
     const next = page.getByRole("button", { name: "Next stage" })
     await expect(next).toBeEnabled()
 
-    // Scoped to the resume panel — jd also renders a MultiSelectWithNote
-    // instance, so an unscoped note-field testid is ambiguous.
-    const resumePanel = page.locator('[data-blind-call-stage="resume"]')
-    await resumePanel
-      .getByTestId("multi-select-with-note-note-field")
-      .fill("An unsaved note edit")
-    await expect(next).toBeDisabled()
-    await expect(next).toHaveAttribute("aria-disabled", "true")
-
-    await resumePanel.getByTestId("multi-select-with-note-note-field").blur()
+    await page.getByTestId("input-with-button-field").fill("A brand new unsaved edit")
+    // Dirty now (visually), but Next was never wired to this at all — no
+    // isComplete/blockedMessage dependency remains on draft state.
     await expect(next).toBeEnabled()
+
+    await next.click()
+    await expect(page.locator('[data-blind-call-stage="resume"]')).toHaveAttribute(
+      "data-active",
+      "true"
+    )
   })
 })

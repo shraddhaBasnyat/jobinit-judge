@@ -42,6 +42,16 @@ export function InputWithInlineSave({
   // button's disabled state.
   const filled = Boolean(lastCommitted.trim()) && draft.trim() === lastCommitted.trim()
 
+  // Distinct from `filled` above: this is the true dirty signal, hoisted
+  // for reuse in render (previously only computed inline for
+  // onDraftDirtyChange). Deliberately not `!filled` — filled can't
+  // distinguish "clean" from "just cleared to empty," which isDraftDirty
+  // must still report as dirty (see its own comment above). Feeds
+  // TextField's `dirty` prop, supplementing (not replacing) the checkmark
+  // below — mutually exclusive by construction, answer different
+  // questions: "did my last edit save" vs. "is there unsaved input now."
+  const dirty = isDraftDirty(draft, lastCommitted)
+
   const charCount = draft.length
   const showCounter = charCount >= COUNTER_VISIBLE_THRESHOLD
   const counterIsWarning = charCount >= COUNTER_WARNING_THRESHOLD
@@ -98,6 +108,7 @@ export function InputWithInlineSave({
           onFocus={handleFocus}
           onBlur={handleBlur}
           placeholder={placeholder}
+          dirty={dirty}
           data-testid="multi-select-with-note-note-field"
         />
         <div className="flex h-3 w-3 shrink-0 items-center justify-center">

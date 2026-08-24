@@ -52,12 +52,4 @@ test.describe("CardPrevNext", () => {
     // not a one-way ratchet.
     await expect(next).toBeEnabled()
   })
-
-  test("a disabled button tap never fires the blocked-stage toast", async ({ page }) => {
-    await page.goto("/judge")
-    const next = page.getByRole("button", { name: "Next stage" })
-    await next.click({ force: true })
-    await next.click({ force: true })
-    await expect(page.getByText("A few more answers to go")).toHaveCount(0)
-  })
 })

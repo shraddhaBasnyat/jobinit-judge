@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useState } from "react"
+import { Fragment, useEffect, useRef, useState } from "react"
 
 import {
   ARCHETYPE_LABELS,
@@ -28,7 +28,14 @@ import { Button } from "@/components/ui/button"
 export type ReviseStageContentProps = {
   revised: RevisedState
   onRevisedChange: (next: RevisedState) => void
-  onEditModeChange: (isEditing: boolean) => void
+  // Purely a track-advance trigger — appends "done" to the track and
+  // auto-advances to it, same mechanism as the lock interstitial's commit
+  // button minus any side effect (editing has no draft layer; `revised` is
+  // already current the instant any edit happens). Only ever reachable from
+  // the recap sub-view, never from editing — which is also why the old
+  // isEditing-driven forward-nav gate is gone: the button that would let a
+  // mid-edit reviewer advance simply doesn't exist in that sub-view.
+  onCommitDone: () => void
 }
 
 function buildReviseFields(
@@ -204,18 +211,19 @@ function buildReviseFields(
   ]
 }
 
-// Distinct from reviseStageBlockedMessage in lib/stages/revise.ts, which
-// gates leaving the stage entirely (CarouselShell's forward-nav, via
-// canAdvanceReviseStage/isEditing). This gates the in-screen Save action
-// specifically: Save must not silently discard an uncommitted draft the
-// reviewer typed but never explicitly committed (Add, or blur for the note
-// fields) — the same "has content" vs. "differs from committed" distinction
-// InputWithButton/InputWithInlineSave's onDraftDirtyChange callbacks already
-// exist to police elsewhere (JD/Resume's own canAdvanceJDStage/
-// canAdvanceResumeStage), reused here rather than reinvented. Cancel is
-// deliberately NOT gated by this — discarding everything, including
-// uncommitted drafts, is Cancel's whole point; only Save (which reads as
-// "keep my changes" to the reviewer) needs the guard.
+// Independent of navigation entirely — leaving Revise is no longer gated by
+// editing state at all (the "I commit to this, I'm done" button that
+// advances the track only exists in the recap sub-view, so a mid-edit
+// reviewer structurally can't trigger it). This gates the in-screen Save
+// action specifically: Save must not silently discard an uncommitted draft
+// the reviewer typed but never explicitly committed (Add, or blur for the
+// note fields) — the same "has content" vs. "differs from committed"
+// distinction InputWithButton/InputWithInlineSave's onDraftDirtyChange
+// callbacks already exist to police elsewhere (JD/Resume's own field-level
+// dirty state), reused here rather than reinvented. Cancel is deliberately
+// NOT gated by this — discarding everything, including uncommitted drafts,
+// is Cancel's whole point; only Save (which reads as "keep my changes" to
+// the reviewer) needs the guard.
 function reviseSaveBlockedMessage(
   hasDirtyRealAskDraft: boolean,
   hasDirtyJdNoteDraft: boolean,
@@ -243,7 +251,9 @@ function reviseSaveBlockedMessage(
 // "Entering Revise always shows recap" (regardless of exit path — Cancel,
 // Save, or an unconditional back-out mid-edit, since backward nav is never
 // gated, same as every other stage) is guaranteed by page.tsx keying this
-// component on whether "revise" is the active stage: React fully remounts
+// component on whether "revise" is the active stage (tracked from
+// CarouselShell's onStageChange observer callback, the only source of
+// position now that CarouselShell is uncontrolled): React fully remounts
 // it — resetting every piece of local state below to its initial value in
 // one shot — at the exact moment the reviewer leaves, rather than this
 // component manually calling multiple setState functions inside a
@@ -251,16 +261,33 @@ function reviseSaveBlockedMessage(
 // "reset all state when some condition changes" is a key-based remount, not
 // an effect — the effect version trips eslint's react-hooks/set-state-in-effect
 // rule for good reason: it's the "adjusting state based on a prop change"
-// anti-pattern the rule exists to catch). page.tsx separately resets its own
-// isRevising state in the same nav-change handler that moves the reviewer
-// off "revise", so this component doesn't need to report an exit itself.
+// anti-pattern the rule exists to catch). This component has no exit state
+// of its own to report upward anymore (no more isEditing/onEditModeChange)
+// — the remount key alone is sufficient.
 export function ReviseStageContent({
   revised,
   onRevisedChange,
-  onEditModeChange,
+  onCommitDone,
 }: ReviseStageContentProps) {
   const [view, setView] = useState<"recap" | "editing">("recap")
-  const [sessionSnapshot, setSessionSnapshot] = useState<RevisedState | null>(null)
+  // A ref, not state — never rendered, only read/written from event
+  // handlers and the unmount-cleanup effect below, both of which need the
+  // synchronously-current value, not a value tied to a render cycle. Kept
+  // as the single source of truth for "is there an open, uncommitted edit
+  // session, and if so what should it revert to" — both Cancel's existing
+  // restore and the exit-effect's new one below read the exact same ref.
+  const sessionSnapshotRef = useRef<RevisedState | null>(null)
+  // Kept in sync with the latest onRevisedChange via its own effect (not a
+  // direct assignment during render — this repo's react-hooks/refs rule
+  // disallows writing ref.current outside an effect/handler entirely) so
+  // the unmount-only effect below can call the current callback without
+  // needing it in its dependency array — which would otherwise force that
+  // effect to re-run (and fire its cleanup) on every render where a parent
+  // passes a fresh function identity, indistinguishable from a real unmount.
+  const onRevisedChangeRef = useRef(onRevisedChange)
+  useEffect(() => {
+    onRevisedChangeRef.current = onRevisedChange
+  })
   const [hasDirtyRealAskDraft, setHasDirtyRealAskDraft] = useState(false)
   const [hasDirtyJdNoteDraft, setHasDirtyJdNoteDraft] = useState(false)
   const [hasDirtyResumeNoteDraft, setHasDirtyResumeNoteDraft] = useState(false)
@@ -281,27 +308,51 @@ export function ReviseStageContent({
   const saveBlocked = saveBlockedMessage !== undefined
 
   function handleStartEditing() {
-    setSessionSnapshot(structuredClone(revised))
+    sessionSnapshotRef.current = structuredClone(revised)
     setView("editing")
-    onEditModeChange(true)
   }
 
   function handleSave() {
     if (saveBlocked) return // defensive — the Save button is already disabled in this state
-    setSessionSnapshot(null)
+    sessionSnapshotRef.current = null
     setView("recap")
-    onEditModeChange(false)
   }
 
   function handleCancel() {
-    if (sessionSnapshot) onRevisedChange(sessionSnapshot)
-    setSessionSnapshot(null)
+    if (sessionSnapshotRef.current) onRevisedChange(sessionSnapshotRef.current)
+    sessionSnapshotRef.current = null
     setHasDirtyRealAskDraft(false)
     setHasDirtyJdNoteDraft(false)
     setHasDirtyResumeNoteDraft(false)
     setView("recap")
-    onEditModeChange(false)
   }
+
+  // Generalizes Cancel's restore to every exit path, not just an explicit
+  // Cancel tap — back-nav, drag-back, or anything else that takes the
+  // reviewer off "revise" while a session is open. Revise has no draft
+  // layer for individual fields (every tap mutates `revised` directly,
+  // immediately), so an abandoned edit — narrative_gap selected with no
+  // sub-option, or any other half-finished change — would otherwise sit in
+  // `revised` permanently once the reviewer navigates away, since nothing
+  // else ever discards it. This closes that class of bug generally, for
+  // every field, rather than requiring each field to be individually
+  // audited and gated (see the Fit-specific gate this replaced).
+  //
+  // Empty deps deliberately — this must fire only on true unmount (which
+  // happens when page.tsx's remount-key changes because activeStageId left
+  // "revise", regardless of which navigation path caused that), never on an
+  // ordinary re-render. If this depended on state that Save/Cancel also
+  // clear as part of their own bookkeeping, the cleanup would fire on THAT
+  // clear too — indistinguishable from a real exit, which would make Save
+  // discard the very edits it just committed. Reads both values through
+  // refs, not closed-over state/props, specifically so what's seen at
+  // unmount time is always current, not whatever it was when this effect
+  // was first set up.
+  useEffect(() => {
+    return () => {
+      if (sessionSnapshotRef.current) onRevisedChangeRef.current(sessionSnapshotRef.current)
+    }
+  }, [])
 
   return (
     <div className="flex w-full flex-col gap-4 p-4" data-testid="revise-stage-content">
@@ -311,14 +362,27 @@ export function ReviseStageContent({
           {fields.map((field) => (
             <Fragment key={field.label}>{field.ReadRows()}</Fragment>
           ))}
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleStartEditing}
-            data-testid="revise-stage-content-start-editing"
-          >
-            Let me change something
-          </Button>
+          {/* Stacked, not side-by-side — both labels are long enough that a
+              flex row overflows this card's width instead of wrapping. */}
+          <div className="flex flex-col gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleStartEditing}
+              data-testid="revise-stage-content-start-editing"
+              className="w-full"
+            >
+              Let me change something
+            </Button>
+            <Button
+              type="button"
+              onClick={onCommitDone}
+              data-testid="revise-stage-content-commit-done"
+              className="w-full"
+            >
+              I commit to this, I&apos;m done
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="flex flex-col gap-4" data-testid="revise-stage-content-editing">

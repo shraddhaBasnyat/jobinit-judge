@@ -78,12 +78,15 @@ test.describe("describeCandidateArchetype", () => {
 })
 
 // Forward from fit now lands on the lock interstitial (Ticket 21), not
-// reveal directly — the forward tap there both locks and advances in one
-// action, so reaching reveal takes one more "Next stage" click than before.
+// reveal directly — tapping "I'm ready to lock" there both locks and
+// auto-advances to reveal in one action (CarouselShell's
+// autoAdvanceOnReveal), so reaching reveal takes one more tap past
+// reachLockInterstitial, on that dedicated button rather than the shared
+// forward arrow.
 async function goToReveal(page: import("@playwright/test").Page) {
   await page.goto("/judge")
   await reachLockInterstitial(page)
-  await page.getByRole("button", { name: "Next stage" }).click()
+  await page.getByTestId("lock-interstitial-content-commit").click()
   await expect(page.locator('[data-blind-call-stage="reveal"]')).toHaveAttribute(
     "data-active",
     "true"

@@ -9,14 +9,9 @@ import { MultiSelectWithNote } from "@/components/blind-call/MultiSelectWithNote
 export type ResumeStageContentProps = {
   resume: ResumeStageState
   onChange: (next: ResumeStageState) => void
-  onNoteDraftDirtyChange?: (isDirty: boolean) => void
 }
 
-export function ResumeStageContent({
-  resume,
-  onChange,
-  onNoteDraftDirtyChange,
-}: ResumeStageContentProps) {
+export function ResumeStageContent({ resume, onChange }: ResumeStageContentProps) {
   const archetypeOptions = Object.values(ARCHETYPE_LABELS)
   const selectedLabels = resume.archetype.selected.map((key) => ARCHETYPE_LABELS[key])
 
@@ -60,7 +55,6 @@ export function ResumeStageContent({
         onNoteChange={(customNote) =>
           onChange({ ...resume, archetype: { ...resume.archetype, customNote } })
         }
-        onNoteDraftDirtyChange={onNoteDraftDirtyChange}
       />
     </div>
   )

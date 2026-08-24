@@ -64,6 +64,7 @@ export function InputWithButton({
           value={draft}
           onValueChange={handleDraftChange}
           placeholder={placeholder}
+          dirty={canAdd}
           data-testid="input-with-button-field"
         />
         {/* No visual confirmation that Add succeeded (e.g. a checkmark) —
