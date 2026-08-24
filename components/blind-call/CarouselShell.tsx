@@ -1,130 +1,227 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { animate, motion, useMotionValue, type PanInfo } from "motion/react"
-import { Toast as ToastPrimitive } from "@base-ui/react/toast"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react"
+import useEmblaCarousel from "embla-carousel-react"
 
 import { NavDotStrip } from "@/components/blind-call/NavDotStrip"
 import { CardPrevNext } from "@/components/blind-call/CardPrevNext"
-import { BLOCKED_STAGE_TOAST_ID, TOAST_TIMEOUT_MS } from "@/components/blind-call/Toast"
+import { computeMountedPrefixLength } from "@/lib/carousel-shell"
 
 export type Stage = {
   id: string
   label: string
   isComplete: () => boolean
-  // Optional stage-specific copy for the blocked-forward-nav toast; falls
-  // back to the generic default below when omitted or returning undefined.
-  // Keeps CarouselShell opaque to *why* a stage is blocked — it only ever
-  // asks for a string, same as it only ever asks isComplete() for a bool.
-  blockedMessage?: () => string | undefined
   content: ReactNode
-}
-
-// A screen that renders inline in the track at a fixed position but is
-// deliberately not a Stage: no nav dot, never enters the `stages` array
-// NavDotStrip receives. `blockedMessage` is a plain string (not a lazily
-// evaluated function like Stage.blockedMessage) because the caller already
-// knows synchronously whether forward-drag should be gated — its presence
-// vs. absence is also the sole signal CarouselShell needs to decide whether
-// drag is currently gated here, keeping CarouselShell opaque to *why*.
-export type Interstitial = {
-  id: string
-  afterStageId: string
-  content: ReactNode
-  forwardLabel?: string
-  backLabel?: string
-  blockedMessage?: string
-  onForward: () => void
+  // false excludes this stage from NavDotStrip's dots — used for the lock
+  // interstitial, which is a real, reachable track position (mounted into
+  // Embla's DOM like any other stage) but not part of the reviewer-facing
+  // six-stage journey display. Defaults to true.
+  navDot?: boolean
+  // true means: the moment this stage transitions from not-mounted to
+  // mounted, CarouselShell automatically scrolls to it (the lock
+  // interstitial's "I'm ready to lock" and Revise's "I commit to this, I'm
+  // done" buttons rely on this — see the auto-advance section below).
+  // Absent/false means becoming mounted only unlocks forward nav to it,
+  // same as jd/resume/fit/reveal today — the reviewer still swipes/taps
+  // there themselves.
+  autoAdvanceOnReveal?: boolean
 }
 
 export type CarouselShellProps = {
   stages: Stage[]
-  currentStageId: string
+  // Pure observer — CarouselShell owns position internally via Embla, this
+  // never feeds a position back in. page.tsx uses it only to know which
+  // stage is active (e.g. ReviseStageContent's remount-on-leave key).
   onStageChange?: (id: string) => void
-  interstitial?: Interstitial
 }
 
-type TrackItem = { kind: "stage"; stage: Stage } | { kind: "interstitial"; interstitial: Interstitial }
+const INTERACTIVE_SELECTOR = 'button, [role="radio"], [role="checkbox"], a[href], input, textarea, select'
 
-function trackItemId(item: TrackItem): string {
-  return item.kind === "stage" ? item.stage.id : item.interstitial.id
-}
+export function CarouselShell({ stages, onStageChange }: CarouselShellProps) {
+  const [emblaRef, emblaApi] = useEmblaCarousel({
+    align: "start",
+    // Migrated from the old capture-phase stopDragOnInteractive listener —
+    // same selector list, same reasoning (a click on interactive stage
+    // content whose pointer drifts a few px mid-click must never engage a
+    // swipe). Returning false here skips drag-handler engagement for the
+    // whole gesture before any movement is tracked, at pointerdown time —
+    // functionally identical to the old guard, just centralized into one
+    // predicate instead of a per-stage-wrapper listener.
+    watchDrag: (_emblaApi, evt) => {
+      const target = evt.target as HTMLElement
+      return !target.closest(INTERACTIVE_SELECTOR)
+    },
+  })
 
-const PEEK_THRESHOLD_PX = 56
-const COMMIT_VELOCITY = 500
-const REST_SPRING = { type: "spring", stiffness: 300, damping: 32 } as const
-const REJECT_SPRING = { type: "spring", stiffness: 500, damping: 40 } as const
+  // Embla's selectedScrollSnap()/canScrollPrev()/canScrollNext() are an
+  // external mutable store, not React state — useSyncExternalStore is the
+  // idiomatic way to read+subscribe to that without ever calling setState
+  // synchronously inside an effect just to seed an initial value (this
+  // repo's lint config enforces react-hooks/set-state-in-effect as an
+  // error, not a style preference).
+  const subscribeToEmbla = useCallback(
+    (onStoreChange: () => void) => {
+      if (!emblaApi) return () => {}
+      emblaApi.on("select", onStoreChange)
+      emblaApi.on("reInit", onStoreChange)
+      return () => {
+        emblaApi.off("select", onStoreChange)
+        emblaApi.off("reInit", onStoreChange)
+      }
+    },
+    [emblaApi]
+  )
+  const selectedIndex = useSyncExternalStore(
+    subscribeToEmbla,
+    () => emblaApi?.selectedScrollSnap() ?? 0,
+    () => 0
+  )
+  const canScrollPrev = useSyncExternalStore(
+    subscribeToEmbla,
+    () => emblaApi?.canScrollPrev() ?? false,
+    () => false
+  )
+  const canScrollNext = useSyncExternalStore(
+    subscribeToEmbla,
+    () => emblaApi?.canScrollNext() ?? false,
+    () => false
+  )
 
-export function CarouselShell({
-  stages,
-  currentStageId,
-  onStageChange,
-  interstitial,
-}: CarouselShellProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [cardWidth, setCardWidth] = useState(0)
-  const x = useMotionValue(0)
-  const toastManager = ToastPrimitive.useToastManager()
+  const mountedCount = computeMountedPrefixLength(stages)
+  const mountedStages = stages.slice(0, mountedCount)
+  const activeStage = mountedStages[selectedIndex]
 
-  // `stages` itself is never mutated — NavDotStrip still receives it
-  // verbatim below, so the interstitial (spliced in only here, for
-  // track/index math) has zero nav-dot footprint.
-  const track: TrackItem[] = useMemo(() => {
-    if (!interstitial) return stages.map((stage) => ({ kind: "stage" as const, stage }))
-    const items: TrackItem[] = []
-    for (const stage of stages) {
-      items.push({ kind: "stage", stage })
-      if (stage.id === interstitial.afterStageId) {
-        items.push({ kind: "interstitial", interstitial })
+  // NavDotStrip's own subset — a pure structural filter, unconditioned by
+  // ANY runtime state, not even completion. Always the same entries from
+  // the very first render, independent of how much is currently mounted
+  // into Embla's track below. This is a DIFFERENT question than "what's
+  // mounted" (mountedCount/mountedStages above) — don't collapse the two
+  // into one filter. A stage can be mounted-but-dotless (the lock
+  // interstitial) or dotted-but-not-yet-mounted (resume, before jd
+  // completes) at the same time.
+  const navDotStages = stages.filter((s) => s.navDot !== false)
+
+  // The stage NavDotStrip should highlight as current. Usually just
+  // activeStage.id — but if the reviewer is currently parked on a
+  // navDot:false stage (the lock interstitial), NavDotStrip's own findIndex
+  // would return -1 for that id (it's excluded from navDotStages), so walk
+  // backward to the nearest preceding navDot-eligible stage instead. This
+  // generalizes the old afterStageId substitution to any navDot:false
+  // stage, not just the lock interstitial specifically.
+  let navDotCurrentId = activeStage?.id
+  if (activeStage && activeStage.navDot === false) {
+    for (let i = selectedIndex; i >= 0; i--) {
+      if (stages[i].navDot !== false) {
+        navDotCurrentId = stages[i].id
+        break
       }
     }
-    return items
-  }, [stages, interstitial])
+  }
 
-  const currentIndex = track.findIndex((item) => trackItemId(item) === currentStageId)
-  const currentItem = track[currentIndex]
+  // Auto-advance, fully internal to CarouselShell, mechanism unchanged from
+  // what was verified empirically — a ref armed synchronously, consumed
+  // only inside Embla's own 'reInit' listener — only relocated from an
+  // external click handler to here.
+  //
+  // Arming happens in a layout effect (not read/written during render,
+  // which React documents as an anti-pattern for refs) comparing this
+  // render's mountedCount against a ref holding the previous render's
+  // value. Because that guard ref is updated inside the same effect
+  // invocation that reads it, this is self-correcting under React 18
+  // Strict Mode's dev-only double-invoke: a second invocation of this
+  // exact effect body sees "no change" (the guard ref was already advanced
+  // by the first invocation) and skips re-arming — verified directly with
+  // a dedicated test tracing the real event log, not assumed safe from this
+  // reasoning alone (see tests/carousel-shell-arming.spec.ts).
+  const pendingAdvanceRef = useRef<number | null>(null)
+  const prevMountedCountRef = useRef(mountedCount)
+  // Real DOM handle for the mobile-scroll-fix effect below — emblaRef
+  // itself is a callback ref, not a RefObject, so this is merged with it
+  // on the viewport div rather than trying to read emblaRef.current.
+  const viewportRef = useRef<HTMLDivElement | null>(null)
 
+  useLayoutEffect(() => {
+    const prev = prevMountedCountRef.current
+    if (mountedCount > prev) {
+      for (let i = prev; i < mountedCount; i++) {
+        if (stages[i].autoAdvanceOnReveal) {
+          pendingAdvanceRef.current = i
+          break
+        }
+      }
+    }
+    prevMountedCountRef.current = mountedCount
+  })
+
+  // Pure observer callback — reports the active stage id upward whenever it
+  // changes. Calling a plain external callback (not React setState) from an
+  // effect is the sanctioned use case the lint rule is built for, unlike
+  // the seeding problem useSyncExternalStore solved above.
+  const activeStageId = activeStage?.id
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const entry = entries[0]
-      if (entry) setCardWidth(entry.contentRect.width)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+    if (activeStageId) onStageChange?.(activeStageId)
+  }, [activeStageId, onStageChange])
+
+  // Consumes the auto-advance ref armed by the layout effect below — the
+  // one piece of real imperative work (telling Embla to scroll) that
+  // belongs in an effect, only ever triggered by Embla's own 'reInit'.
+  useEffect(() => {
+    if (!emblaApi) return
+    function onReInit() {
+      if (pendingAdvanceRef.current !== null) {
+        const target = pendingAdvanceRef.current
+        pendingAdvanceRef.current = null
+        // console.debug, not a UI-visible effect — exists so
+        // tests/carousel-shell-arming.spec.ts can assert this fires exactly
+        // once per genuine transition (a double-arm to the same target
+        // produces no visible symptom otherwise, since scrollTo to where
+        // you're already heading is a no-op).
+        console.debug("carousel-shell:auto-advance", target)
+        emblaApi!.scrollTo(target)
+      }
+    }
+    emblaApi.on("reInit", onReInit)
+    return () => {
+      emblaApi.off("reInit", onReInit)
+    }
+  }, [emblaApi])
 
   // Workaround, not a root-cause fix, for a mobile-viewport-Chromium-only
   // bug (Chrome DevTools device toolbar / Playwright isMobile+hasTouch;
-  // never reproduces on desktop Chromium): tapping a plain <button> pill or
-  // a Base UI Radio inside this track snaps window.scrollY to 0 whenever
-  // the track carries an active CSS `transform` (any stage past index 0 —
-  // "jd" at index 0 is never affected, since `x` only renders as
-  // `translateX(0)`/"none" there). Guards by tracking a "stable" scrollY,
-  // updated only when a `scroll` event was just preceded by a genuine
-  // touchmove/wheel; any other scroll while focus sits inside this track is
-  // reverted, regardless of which browser-internal mechanism caused it.
-  // Only attached while `currentIndex > 0`, so "jd" never pays for this.
-  //
-  // Covers buttons and radios (verified via mobile-emulation reproduction:
-  // archetype pills, both StatementAssess radio rows, plus the drag/
-  // rubber-band reject-spring gesture from Ticket #1, confirmed unaffected
-  // since it's a transform animation that never touches window.scrollY).
-  // Does NOT cover the archetype note field (InputWithInlineSave) — that
-  // field's jump needed a separate, narrower fix local to the component
-  // itself; see its own comment for why this general approach didn't
-  // extend to it.
-  //
-  // Caveat that matters going forward: this guard is the only thing in the
-  // codebase that calls scrollTo/scrollBy/scrollIntoView today (confirmed
-  // via grep), so there's nothing legitimate to fight — but a future
-  // feature that intentionally scrolls while focus is inside this track
-  // (e.g. scrolling a validation error into view) would get reverted by
-  // this too.
+  // never reproduces on desktop Chromium) — re-verified directly against
+  // this rebuilt CarouselShell (Pixel 7 emulation via Playwright, see
+  // tests/mobile-scroll-fix.spec.ts), not assumed resolved or assumed
+  // still-needed as-is:
+  // - The bug reproduces identically under Embla's translate3d-based
+  //   positioning, the same class of precondition as the original
+  //   spring-animated transform (a transform on the track's ancestor while
+  //   focus lands inside it) — still needed, kept.
+  // - Ported forward essentially unchanged, EXCEPT it needed a real fix
+  //   during this migration: emblaRef is a callback ref, not a RefObject,
+  //   so the original cast-based port never actually acquired a DOM node
+  //   and silently never attached at all. Now merged with its own
+  //   viewportRef below instead.
+  // - New finding, outside the bug's original documented scope: for a pure
+  //   touch tap (Playwright .tap(), not .click()), the browser's scroll
+  //   reset can fire before document.activeElement reflects the new focus,
+  //   which this guard's focusInsideTrack check misses — the correction
+  //   only reliably fires for .click()-style interaction (matching both
+  //   this suite's own convention and the original bug's most plausible
+  //   repro shape). Documented, not fixed here — no baseline exists to
+  //   confirm whether the old Framer Motion implementation handled true
+  //   touch-tap event ordering any better, so this isn't a regression to
+  //   this migration specifically, just a gap this pass surfaced.
+  // Only attached while selectedIndex > 0, so "jd" never pays for this.
   useEffect(() => {
-    const el = containerRef.current
-    if (!el || currentIndex === 0) return
+    if (!viewportRef.current || selectedIndex === 0) return
+    const containerEl = viewportRef.current
 
     let stableScrollY = window.scrollY
     let gestureActiveUntil = 0
@@ -136,7 +233,7 @@ export function CarouselShell({
 
     function handleScroll() {
       const focusInsideTrack = Boolean(
-        document.activeElement && containerRef.current?.contains(document.activeElement)
+        document.activeElement && containerEl.contains(document.activeElement)
       )
       const scrolledByGesture = Date.now() <= gestureActiveUntil
 
@@ -155,190 +252,42 @@ export function CarouselShell({
       window.removeEventListener("wheel", markGestureActive)
       window.removeEventListener("scroll", handleScroll)
     }
-  }, [currentIndex])
-
-  useEffect(() => {
-    if (!cardWidth) return
-    animate(x, -currentIndex * cardWidth, REST_SPRING)
-  }, [currentIndex, cardWidth, x])
-
-  const settle = useCallback(() => {
-    animate(x, -currentIndex * cardWidth, REJECT_SPRING)
-  }, [x, currentIndex, cardWidth])
-
-  // Only one blocked-stage toast may be visible at a time: an existing id
-  // would have its dismiss timer refreshed by toastManager.add(), so a
-  // repeat attempt while one is already showing is skipped entirely.
-  const fireBlockedToast = useCallback(() => {
-    const alreadyShowing = toastManager.toasts.some((t) => t.id === BLOCKED_STAGE_TOAST_ID)
-    if (alreadyShowing) return
-    const item = track[currentIndex]
-    const title =
-      (item?.kind === "interstitial"
-        ? item.interstitial.blockedMessage
-        : item?.kind === "stage"
-          ? item.stage.blockedMessage?.()
-          : undefined) ?? "A few more answers to go"
-    toastManager.add({
-      id: BLOCKED_STAGE_TOAST_ID,
-      title,
-      timeout: TOAST_TIMEOUT_MS,
-    })
-  }, [toastManager, track, currentIndex])
-
-  const handleDragEnd = useCallback(
-    (_event: PointerEvent | MouseEvent | TouchEvent, info: PanInfo) => {
-      const offset = info.offset.x
-      const velocity = info.velocity.x
-      const pastThreshold =
-        Math.abs(offset) > PEEK_THRESHOLD_PX || Math.abs(velocity) > COMMIT_VELOCITY
-
-      if (!pastThreshold) {
-        settle()
-        return
-      }
-
-      if (offset < 0) {
-        // Dragged left = forward. Gated by the current stage's isComplete()
-        // — or, at the interstitial, by whether the caller still considers
-        // it locked (interstitial.blockedMessage present pre-lock; absent
-        // once locked, since there's nothing left to accidentally trigger).
-        // Forward-drag past the interstitial is deliberately never allowed
-        // to commit the lock itself — only the labeled arrow tap can, via
-        // commitForward below — so a fast swipe can't blow past the warning
-        // copy the reviewer never had to read.
-        const item = track[currentIndex]
-        const next = track[currentIndex + 1]
-        if (!item || !next) {
-          settle()
-          return
-        }
-        if (item.kind === "interstitial") {
-          if (item.interstitial.blockedMessage !== undefined) {
-            settle()
-            fireBlockedToast()
-          } else {
-            onStageChange?.(trackItemId(next))
-          }
-          return
-        }
-        if (item.stage.isComplete()) {
-          onStageChange?.(trackItemId(next))
-        } else {
-          settle()
-          fireBlockedToast()
-        }
-      } else {
-        // Dragged right = backward, always unconditional — never gated.
-        const prev = track[currentIndex - 1]
-        if (!prev) {
-          settle()
-          return
-        }
-        onStageChange?.(trackItemId(prev))
-      }
-    },
-    [track, currentIndex, onStageChange, settle, fireBlockedToast]
-  )
-
-  const commitForward = useCallback(() => {
-    const item = track[currentIndex]
-    if (item?.kind === "interstitial") {
-      item.interstitial.onForward()
-      return
-    }
-    const next = track[currentIndex + 1]
-    if (next) onStageChange?.(trackItemId(next))
-  }, [track, currentIndex, onStageChange])
-
-  const commitBackward = useCallback(() => {
-    const prev = track[currentIndex - 1]
-    if (prev) onStageChange?.(trackItemId(prev))
-  }, [track, currentIndex, onStageChange])
-
-  const nextDisabled =
-    currentItem?.kind === "interstitial" ? false : !currentItem?.stage.isComplete()
-  const prevDisabled = currentIndex === 0
-
-  // Framer Motion's drag="x" listens for pointerdown on this track's own DOM
-  // node — it doesn't distinguish "the user meant to swipe" from "the user
-  // clicked a button/radio inside stage content and their mouse drifted a
-  // few pixels mid-click." Any interactive descendant can accidentally
-  // trigger a full stage-navigation swipe this way. This capture-phase
-  // handler sits on each stage's wrapper div (a descendant of the track,
-  // ancestor of stage content) and stops propagation before the event ever
-  // reaches the track, so Framer Motion's own (bubble-phase) pointerdown
-  // listener never fires — without disabling genuine swipes, which always
-  // start on non-interactive panel content and never hit this branch.
-  // Verified directly: reproduced the false-navigation with real pointer
-  // sequences (mousedown + a few px of horizontal drift + mouseup) on both
-  // StatementAssess's existing radio and RadioCard, then confirmed this
-  // guard eliminates it while leaving normal clicks and genuine
-  // swipe-to-navigate unaffected.
-  //
-  // Caveat that matters going forward: the selector below is a fixed,
-  // closed list. A future interactive control built without a matching
-  // tag/role — e.g. a custom <div>-based toggle with just an onClick, no
-  // role="button" — falls outside it silently, and this exact bug
-  // resurfaces for that control with no error to signal it. Either extend
-  // this selector when adding such a control, or give it its own
-  // onPointerDown={(e) => e.stopPropagation()}.
-  const stopDragOnInteractive = useCallback((e: React.PointerEvent) => {
-    const target = e.target as HTMLElement
-    if (target.closest('button, [role="radio"], [role="checkbox"], a[href], input, textarea, select')) {
-      e.stopPropagation()
-    }
-  }, [])
-
-  // NavDotStrip only ever sees the real `stages` array + a plain id — it
-  // has no notion the interstitial exists. While parked there, it's handed
-  // afterStageId instead of the interstitial's own id, so the dot for the
-  // stage just before it (e.g. "fit") simply stays lit as current rather
-  // than every dot dropping to "incomplete" (which is what a literal,
-  // unmatched id would produce, since NavDotStrip's `findIndex` returns -1).
-  const navDotStageId =
-    currentItem?.kind === "interstitial" ? currentItem.interstitial.afterStageId : currentStageId
+  }, [selectedIndex])
 
   return (
     <div className="flex w-full flex-col gap-4">
-      <NavDotStrip stages={stages} currentStageId={navDotStageId} />
-      <div ref={containerRef} data-testid="carousel-viewport" className="w-full overflow-hidden">
-        <motion.div
-          data-testid="carousel-track"
-          className="flex flex-row"
-          style={{ x }}
-          drag="x"
-          dragConstraints={{ left: -cardWidth * 1.2, right: cardWidth * 1.2 }}
-          dragMomentum={false}
-          onDragEnd={handleDragEnd}
-        >
-          {track.map((item) => {
-            const id = trackItemId(item)
-            const isActive = id === currentStageId
+      <NavDotStrip stages={navDotStages} currentStageId={navDotCurrentId ?? ""} />
+      <div
+        ref={(node) => {
+          emblaRef(node)
+          viewportRef.current = node
+        }}
+        data-testid="carousel-viewport"
+        className="w-full overflow-hidden"
+      >
+        <div data-testid="carousel-track" className="flex flex-row">
+          {mountedStages.map((stage, i) => {
+            const isActive = i === selectedIndex
             return (
               <div
-                key={id}
-                data-blind-call-stage={id}
-                // Marker attribute only — nothing reads data-active as a CSS selector.
+                key={stage.id}
+                data-blind-call-stage={stage.id}
                 data-active={isActive || undefined}
                 aria-hidden={!isActive}
                 inert={!isActive}
-                onPointerDownCapture={stopDragOnInteractive}
                 className="w-full shrink-0"
               >
-                {item.kind === "stage" ? item.stage.content : item.interstitial.content}
+                {stage.content}
               </div>
             )
           })}
-        </motion.div>
+        </div>
       </div>
       <CardPrevNext
-        onPrev={commitBackward}
-        onNext={commitForward}
-        prevDisabled={prevDisabled}
-        nextDisabled={nextDisabled}
-        forwardLabel={currentItem?.kind === "interstitial" ? currentItem.interstitial.forwardLabel : undefined}
-        backLabel={currentItem?.kind === "interstitial" ? currentItem.interstitial.backLabel : undefined}
+        onPrev={() => emblaApi?.scrollPrev()}
+        onNext={() => emblaApi?.scrollNext()}
+        prevDisabled={!canScrollPrev}
+        nextDisabled={!canScrollNext}
       />
     </div>
   )

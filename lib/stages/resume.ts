@@ -30,20 +30,3 @@ export function isResumeStageComplete(resume: ResumeStageState): boolean {
   )
 }
 
-// Mirrors canAdvanceJDStage's shape, reduced to Resume's one draft-capable
-// field — StatementAssess commits immediately via radio selection, so the
-// archetype note is the only field here that can sit dirty/unsaved.
-export function canAdvanceResumeStage(
-  resume: ResumeStageState,
-  hasDirtyNoteDraft: boolean
-): boolean {
-  return isResumeStageComplete(resume) && !hasDirtyNoteDraft
-}
-
-// Mirrors jdStageBlockedMessage's note branch verbatim.
-export function resumeStageBlockedMessage(hasDirtyNoteDraft: boolean): string | undefined {
-  if (hasDirtyNoteDraft) {
-    return "You have an unsaved note — tap elsewhere to save it, or clear it before continuing"
-  }
-  return undefined
-}

@@ -7,12 +7,13 @@ test.describe("Judge page", () => {
     await expect(labels).toHaveText(["JD", "Resume", "Fit", "Reveal", "Revise", "Done"])
   })
 
-  test("all 6 stage panels are mounted in the DOM even though only jd/resume are reachable", async ({
+  test("only jd is mounted in the DOM on first load — the rest mount only once their predecessor completes", async ({
     page,
   }) => {
     await page.goto("/judge")
-    for (const id of ["jd", "resume", "fit", "reveal", "revise", "done"]) {
-      await expect(page.locator(`[data-blind-call-stage="${id}"]`)).toHaveCount(1)
+    await expect(page.locator('[data-blind-call-stage="jd"]')).toHaveCount(1)
+    for (const id of ["resume", "fit", "lock", "reveal", "revise", "done"]) {
+      await expect(page.locator(`[data-blind-call-stage="${id}"]`)).toHaveCount(0)
     }
   })
 

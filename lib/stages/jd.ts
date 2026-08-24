@@ -30,35 +30,3 @@ export function isJDStageComplete(jd: JDStageState): boolean {
   )
 }
 
-// The stage-level "can advance" signal CarouselShell's forward-nav gate
-// actually reads (via Stage.isComplete) — distinct from isJDStageComplete
-// itself: a stage can be complete AND still have an unsaved draft sitting in
-// realAsk (blocked until Add or clear) or in the archetype note field
-// (blocked until blur commits or clears it) — either should still block
-// forward navigation. Backward navigation is unconditional and never
-// consults this.
-export function canAdvanceJDStage(
-  jd: JDStageState,
-  hasDirtyRealAskDraft: boolean,
-  hasDirtyNoteDraft: boolean
-): boolean {
-  return isJDStageComplete(jd) && !hasDirtyRealAskDraft && !hasDirtyNoteDraft
-}
-
-// Stage.blockedMessage for "jd" — returns undefined (CarouselShell's
-// existing generic default applies) unless the block is specifically caused
-// by an unsaved draft, which gets its own copy. realAsk is checked first
-// when both happen to be dirty simultaneously (e.g. user left realAsk
-// mid-edit without tapping Add, then also started typing a note).
-export function jdStageBlockedMessage(
-  hasDirtyRealAskDraft: boolean,
-  hasDirtyNoteDraft: boolean
-): string | undefined {
-  if (hasDirtyRealAskDraft) {
-    return "You have an unsaved draft — tap Add or clear it before continuing"
-  }
-  if (hasDirtyNoteDraft) {
-    return "You have an unsaved note — tap elsewhere to save it, or clear it before continuing"
-  }
-  return undefined
-}

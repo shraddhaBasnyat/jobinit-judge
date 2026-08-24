@@ -1,9 +1,4 @@
-export {
-  isJDStageComplete,
-  canAdvanceJDStage,
-  jdStageBlockedMessage,
-  type JDStageState,
-} from "@/lib/stages/jd"
+export { isJDStageComplete, type JDStageState } from "@/lib/stages/jd"
 
 export {
   STAGE_META,
@@ -21,12 +16,7 @@ export {
   type RevisedState,
 } from "@/lib/stages/blind-call"
 
-export {
-  isResumeStageComplete,
-  canAdvanceResumeStage,
-  resumeStageBlockedMessage,
-  type ResumeStageState,
-} from "@/lib/stages/resume"
+export { isResumeStageComplete, type ResumeStageState } from "@/lib/stages/resume"
 
 export { isFitStageComplete, type FitStageState } from "@/lib/stages/fit"
 
@@ -37,9 +27,4 @@ export {
   candidateArchetypePillLabel,
 } from "@/lib/stages/reveal"
 
-export {
-  isReviseStageComplete,
-  canAdvanceReviseStage,
-  reviseStageBlockedMessage,
-  type ReviseField,
-} from "@/lib/stages/revise"
+export { type ReviseField } from "@/lib/stages/revise"

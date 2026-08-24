@@ -25,18 +25,20 @@ test.describe("Lock interstitial", () => {
     ).toHaveCount(1)
   })
 
-  test("forward tap locks, snapshots, and advances to reveal in one action", async ({ page }) => {
+  test("tapping 'I'm ready to lock' locks, snapshots, and advances to reveal in one action", async ({
+    page,
+  }) => {
     await page.goto("/judge")
     await reachLockInterstitial(page)
 
-    await page.getByRole("button", { name: "Next stage" }).click()
+    await page.getByTestId("lock-interstitial-content-commit").click()
     await expect(page.locator('[data-blind-call-stage="reveal"]')).toHaveAttribute(
       "data-active",
       "true"
     )
   })
 
-  test("forward drag pre-lock is blocked with a toast, never commits the lock", async ({
+  test("forward drag pre-lock has nowhere to go — reveal isn't mounted yet, so it rubber-bands with no navigation", async ({
     page,
   }) => {
     await page.goto("/judge")
@@ -47,45 +49,52 @@ test.describe("Lock interstitial", () => {
       "data-active",
       "true"
     )
-    await expect(page.getByText("Tap the arrow to lock and continue")).toHaveCount(1)
+    // No toast mechanism exists anymore — rejection is purely Embla's own
+    // boundary rubber-band, same as any other unmounted-next-stage case.
+    await expect(page.locator('[data-blind-call-stage="reveal"]')).toHaveCount(0)
   })
 
-  test("back-nav to interstitial after locking shows backLabel, no forward warning, drag resumes", async ({
+  test("back-nav to interstitial after locking shows the post-lock note, drag resumes", async ({
     page,
   }) => {
     await page.goto("/judge")
     await reachLockInterstitial(page)
-    await page.getByRole("button", { name: "Next stage" }).click() // locks, arrives at reveal
+    await page.getByTestId("lock-interstitial-content-commit").click() // locks, arrives at reveal
 
     await page.getByRole("button", { name: "Previous stage" }).click()
     await expect(page.locator('[data-blind-call-stage="lock"]')).toHaveAttribute(
       "data-active",
       "true"
     )
-    await expect(page.getByText("Answers are already locked")).toHaveCount(1)
+    await expect(page.getByTestId("lock-interstitial-content-post-lock-note")).toHaveText(
+      "Answers are already locked"
+    )
     await expect(
       page.getByText("This will lock your answers — you can still revise them later.")
     ).toHaveCount(0)
 
-    // Body copy switches to past tense post-lock too, not just the arrow label.
+    // Body copy switches to past tense post-lock too, not just the button.
     await expect(page.getByText("Your JD, resume, and fit answers are locked.")).toHaveCount(1)
     await expect(
       page.getByText("Your JD, resume, and fit answers will be locked once you continue.")
     ).toHaveCount(0)
 
-    // Drag-gating is lifted post-lock — nothing left to accidentally trigger.
+    // The commit button is gone post-lock — nothing left to trigger.
+    await expect(page.getByTestId("lock-interstitial-content-commit")).toHaveCount(0)
+
+    // Drag-gating is lifted post-lock — reveal is mounted now, ordinary
+    // forward-drag reaches it same as any other boundary crossing.
     await dragCarousel(page, -200)
     await expect(page.locator('[data-blind-call-stage="reveal"]')).toHaveAttribute(
       "data-active",
       "true"
     )
-    await expect(page.getByText("Tap the arrow to lock and continue")).toHaveCount(0)
   })
 
   test("jd/resume/fit remain reachable via back-nav after locking", async ({ page }) => {
     await page.goto("/judge")
     await reachLockInterstitial(page)
-    await page.getByRole("button", { name: "Next stage" }).click() // locks, arrives at reveal
+    await page.getByTestId("lock-interstitial-content-commit").click() // locks, arrives at reveal
 
     const prev = page.getByRole("button", { name: "Previous stage" })
     for (const id of ["lock", "fit", "resume", "jd"]) {
@@ -102,7 +111,7 @@ test.describe("Lock interstitial", () => {
   }) => {
     await page.goto("/judge")
     await reachLockInterstitial(page)
-    await page.getByRole("button", { name: "Next stage" }).click() // locks
+    await page.getByTestId("lock-interstitial-content-commit").click() // locks
 
     const prev = page.getByRole("button", { name: "Previous stage" })
     await prev.click() // back to lock

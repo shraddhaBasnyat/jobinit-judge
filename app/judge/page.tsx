@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react"
 
 import { CarouselShell, type Stage } from "@/components/blind-call/CarouselShell"
-import { BlindCallToaster } from "@/components/blind-call/Toast"
 import { JDStageContent } from "@/components/blind-call/JDStageContent"
 import { ResumeStageContent } from "@/components/blind-call/ResumeStageContent"
 import { FitStageContent } from "@/components/blind-call/FitStageContent"
@@ -12,14 +11,10 @@ import { LockInterstitialContent } from "@/components/blind-call/LockInterstitia
 import { ReviseStageContent } from "@/components/blind-call/ReviseStageContent"
 import {
   STAGE_META,
-  canAdvanceJDStage,
-  jdStageBlockedMessage,
-  canAdvanceResumeStage,
-  resumeStageBlockedMessage,
+  isJDStageComplete,
+  isResumeStageComplete,
   isFitStageComplete,
   isRevealStageComplete,
-  canAdvanceReviseStage,
-  reviseStageBlockedMessage,
   type BlindCallStageId,
   type JDStageState,
   type ResumeStageState,
@@ -65,34 +60,47 @@ function FrozenStageWrapper({ locked, children }: { locked: boolean; children: R
 }
 
 export default function JudgePage() {
-  // "lock" addresses the lock-interstitial screen for track position only —
-  // it deliberately never enters BlindCallStageId, since the interstitial
-  // is not a Stage.
-  const [currentStageId, setCurrentStageId] = useState<BlindCallStageId | "lock">("jd")
   const [jd, setJd] = useState<JDStageState>(INITIAL_JD_STATE)
-  const [hasDirtyRealAskDraft, setHasDirtyRealAskDraft] = useState(false)
-  const [hasDirtyNoteDraft, setHasDirtyNoteDraft] = useState(false)
   const [resume, setResume] = useState<ResumeStageState>(INITIAL_RESUME_STATE)
-  const [hasDirtyResumeNoteDraft, setHasDirtyResumeNoteDraft] = useState(false)
   const [fit, setFit] = useState<FitStageState>(INITIAL_FIT_STATE)
   const [locked, setLocked] = useState(false)
   const [revised, setRevised] = useState<RevisedState | undefined>(undefined)
-  const [isRevising, setIsRevising] = useState(false)
+  // Replaces isRevising/canAdvanceReviseStage — Revise's own completion
+  // signal for the prefix-scan walk, flipped only by the explicit "I commit
+  // to this, I'm done" button (see ReviseStageContent's onCommitDone).
+  const [hasCommittedRevise, setHasCommittedRevise] = useState(false)
+  // Pure observer of CarouselShell's position, sourced entirely from its
+  // onStageChange callback — CarouselShell owns position internally now
+  // (see CarouselShell.tsx), this is never fed back in. The only consumer
+  // is ReviseStageContent's remount-on-leave key below.
+  const [activeStageId, setActiveStageId] = useState<BlindCallStageId>("jd")
 
-  const handleLockForward = useCallback(() => {
+  // Data side effect only — the append-to-"reveal"-and-advance is automatic
+  // inside CarouselShell once its own prefix-scan walk sees isComplete()
+  // (== locked) flip, driven by the "reveal" stage's autoAdvanceOnReveal
+  // flag below. setRevised and setLocked must stay synchronous within this
+  // one handler call (no await/deferred boundary between them) — that's
+  // what guarantees React batches them into a single render, so
+  // CarouselShell's isComplete: () => locked closure never observes
+  // locked === true on a render where revised hasn't also already been
+  // updated to match. Their relative order doesn't itself change runtime
+  // behavior (state updates don't take effect until the batched
+  // re-render), but revised is snapshotted first for readability, matching
+  // "snapshot happens at the moment of locking."
+  const handleReadyToLock = useCallback(() => {
     setRevised(structuredClone({ jd, resume, fit }))
     setLocked(true)
-    setCurrentStageId("reveal")
   }, [jd, resume, fit])
 
-  // Resets isRevising in the same event handler that moves the reviewer off
-  // "revise" (rather than an effect watching for the change) — the
-  // React-recommended way to sync state to an event, not a useEffect. Fires
-  // regardless of which nav path was used (button or drag), since both flow
-  // through CarouselShell's onStageChange.
+  // Purely a track-advance trigger, same shape as handleReadyToLock minus
+  // any side effect — "done" auto-appends and CarouselShell auto-advances
+  // to it once this flips isComplete() true for "revise".
+  const handleCommitRevise = useCallback(() => {
+    setHasCommittedRevise(true)
+  }, [])
+
   const handleStageChange = useCallback((id: string) => {
-    setCurrentStageId(id as BlindCallStageId | "lock")
-    if (id !== "revise") setIsRevising(false)
+    setActiveStageId(id as BlindCallStageId)
   }, [])
 
   const stages: Stage[] = useMemo(
@@ -101,16 +109,10 @@ export default function JudgePage() {
         if (meta.id === "jd") {
           return {
             ...meta,
-            isComplete: () => canAdvanceJDStage(jd, hasDirtyRealAskDraft, hasDirtyNoteDraft),
-            blockedMessage: () => jdStageBlockedMessage(hasDirtyRealAskDraft, hasDirtyNoteDraft),
+            isComplete: () => isJDStageComplete(jd),
             content: (
               <FrozenStageWrapper locked={locked}>
-                <JDStageContent
-                  jd={jd}
-                  onChange={setJd}
-                  onRealAskDraftDirtyChange={setHasDirtyRealAskDraft}
-                  onNoteDraftDirtyChange={setHasDirtyNoteDraft}
-                />
+                <JDStageContent jd={jd} onChange={setJd} />
               </FrozenStageWrapper>
             ),
           }
@@ -118,15 +120,10 @@ export default function JudgePage() {
         if (meta.id === "resume") {
           return {
             ...meta,
-            isComplete: () => canAdvanceResumeStage(resume, hasDirtyResumeNoteDraft),
-            blockedMessage: () => resumeStageBlockedMessage(hasDirtyResumeNoteDraft),
+            isComplete: () => isResumeStageComplete(resume),
             content: (
               <FrozenStageWrapper locked={locked}>
-                <ResumeStageContent
-                  resume={resume}
-                  onChange={setResume}
-                  onNoteDraftDirtyChange={setHasDirtyResumeNoteDraft}
-                />
+                <ResumeStageContent resume={resume} onChange={setResume} />
               </FrozenStageWrapper>
             ),
           }
@@ -142,9 +139,23 @@ export default function JudgePage() {
             ),
           }
         }
+        if (meta.id === "lock") {
+          // No autoAdvanceOnReveal here, deliberately — that flag belongs
+          // on the stage being advanced TO once its predecessor completes
+          // (see "reveal" below), not on the stage that just became
+          // mounted. Putting it here would auto-scroll to "lock" itself the
+          // instant fit completes, before the reviewer ever taps anything.
+          return {
+            ...meta,
+            navDot: false,
+            isComplete: () => locked,
+            content: <LockInterstitialContent locked={locked} onReadyToLock={handleReadyToLock} />,
+          }
+        }
         if (meta.id === "reveal") {
           return {
             ...meta,
+            autoAdvanceOnReveal: true,
             isComplete: () => isRevealStageComplete(),
             content: <RevealStageContent reveal={MOCK_CASE.reveal} />,
           }
@@ -152,64 +163,37 @@ export default function JudgePage() {
         if (meta.id === "revise") {
           return {
             ...meta,
-            isComplete: () => canAdvanceReviseStage(isRevising),
-            blockedMessage: () => reviseStageBlockedMessage(isRevising),
+            isComplete: () => hasCommittedRevise,
             // No FrozenStageWrapper here, deliberately — Revise is the one
             // place still interactive post-lock.
             content: revised ? (
               <ReviseStageContent
-                key={currentStageId === "revise" ? "revise-active" : "revise-inactive"}
+                key={activeStageId === "revise" ? "revise-active" : "revise-inactive"}
                 revised={revised}
                 onRevisedChange={setRevised}
-                onEditModeChange={setIsRevising}
+                onCommitDone={handleCommitRevise}
               />
             ) : (
               <PlaceholderStage title="Revise" />
             ),
           }
         }
+        // "done" — no ticket builds this yet, renders as a placeholder.
         return {
           ...meta,
+          autoAdvanceOnReveal: true,
           isComplete: () => false,
           content: <PlaceholderStage title={`${meta.label} — coming soon`} />,
         }
       }),
-    [
-      jd,
-      hasDirtyRealAskDraft,
-      hasDirtyNoteDraft,
-      resume,
-      hasDirtyResumeNoteDraft,
-      fit,
-      locked,
-      revised,
-      isRevising,
-      currentStageId,
-    ]
+    [jd, resume, fit, locked, revised, hasCommittedRevise, activeStageId, handleReadyToLock, handleCommitRevise]
   )
 
   return (
-    <BlindCallToaster>
-      <main className="flex flex-1 items-center justify-center bg-muted p-6">
-        <div className="w-full max-w-md rounded-lg border border-border bg-background p-4">
-          <CarouselShell
-            stages={stages}
-            currentStageId={currentStageId}
-            onStageChange={handleStageChange}
-            interstitial={{
-              id: "lock",
-              afterStageId: "fit",
-              content: <LockInterstitialContent locked={locked} />,
-              forwardLabel: locked
-                ? undefined
-                : "This will lock your answers — you can still revise them later.",
-              backLabel: locked ? "Answers are already locked" : undefined,
-              blockedMessage: locked ? undefined : "Tap the arrow to lock and continue",
-              onForward: handleLockForward,
-            }}
-          />
-        </div>
-      </main>
-    </BlindCallToaster>
+    <main className="flex flex-1 items-center justify-center bg-muted p-6">
+      <div className="w-full max-w-md rounded-lg border border-border bg-background p-4">
+        <CarouselShell stages={stages} onStageChange={handleStageChange} />
+      </div>
+    </main>
   )
 }

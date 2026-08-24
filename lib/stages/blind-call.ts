@@ -97,7 +97,10 @@ export function describeAssessValue(value: AssessValue) {
   return ASSESS_VALUE_META[value]
 }
 
-export type BlindCallStageId = "jd" | "resume" | "fit" | "reveal" | "revise" | "done"
+// "lock" joins this union as a real stage id now that the lock interstitial
+// is an ordinary Stage (navDot: false) rather than a CarouselShell-level
+// special case — see CarouselShell.tsx's unified Stage type.
+export type BlindCallStageId = "jd" | "resume" | "fit" | "lock" | "reveal" | "revise" | "done"
 
 export type RevisedState = { jd: JDStageState; resume: ResumeStageState; fit: FitStageState }
 
@@ -114,10 +117,16 @@ export type BlindCallState = {
   revised?: RevisedState
 }
 
+// Array order is load-bearing: it's the sole source of truth for track
+// position now (CarouselShell's prefix-scan walk mounts stages in this
+// order), replacing the old afterStageId-splice mechanism that used to
+// position the lock interstitial. "lock" sits between "fit" and "reveal"
+// simply by being listed there.
 export const STAGE_META: { id: BlindCallStageId; label: string }[] = [
   { id: "jd", label: "JD" },
   { id: "resume", label: "Resume" },
   { id: "fit", label: "Fit" },
+  { id: "lock", label: "Lock" },
   { id: "reveal", label: "Reveal" },
   { id: "revise", label: "Revise" },
   { id: "done", label: "Done" },

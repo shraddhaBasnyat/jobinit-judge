@@ -125,22 +125,22 @@ export async function forceFitComplete(page: Page) {
 }
 
 // Completes jd/resume/fit and advances to the lock interstitial, leaving it
-// pre-lock (forward tap not yet taken). Does not lock — tests that need the
-// post-lock state call the "Next stage" button themselves afterward, since
-// locking is the one action under test in several of them.
+// pre-lock (the "I'm ready to lock" button not yet tapped). Does not lock —
+// tests that need the post-lock state tap that button themselves
+// afterward, since locking is the one action under test in several of them.
 //
 // Ends with an explicit assertion that the interstitial is actually active,
 // then waits for the track's own settle animation to finish, before
 // returning. Three stage-advancing clicks fire back to back here with no
 // pause between them; a caller that immediately starts a synthetic drag
 // right after (e.g. dragCarousel) can still hit a real gesture-recognition
-// race even once the assertion above has confirmed data-active — Framer
-// Motion's drag gesture setup for the newly-active track position isn't
-// fully wired within the same React commit the DOM attribute lands in.
-// Verified directly: without waiting for the settle animation to complete, a
-// blocked-forward drag at the interstitial intermittently resolved as a
-// same-position no-op — no toast, no advance, no error — instead of
-// registering against the new position at all.
+// race even once the assertion above has confirmed data-active — Embla's
+// drag handler setup for the newly-mounted track position isn't guaranteed
+// to be fully wired within the same React commit the DOM attribute lands
+// in. Verified directly under the old Framer Motion implementation (a
+// blocked-forward drag intermittently resolved as a same-position no-op
+// without this wait) — kept as a precaution under Embla too rather than
+// re-litigated per call site.
 export async function reachLockInterstitial(page: Page) {
   await forceJDComplete(page)
   await page.getByRole("button", { name: "Next stage" }).click()
@@ -156,13 +156,21 @@ export async function reachLockInterstitial(page: Page) {
 }
 
 // Completes the flow through locking + Reveal and lands on Revise's recap
-// sub-view. Two "Next stage" clicks past reachLockInterstitial: the first
-// commits the lock (interstitial's onForward — seeds `revised`, sets
-// currentStageId to "reveal"), the second is a normal stage-advance from
-// Reveal to Revise.
+// sub-view. Past reachLockInterstitial: tapping "I'm ready to lock" both
+// locks and auto-advances to Reveal in one action (CarouselShell's
+// autoAdvanceOnReveal, driven by the "reveal" stage's isComplete flipping
+// true the moment `locked` does) — no "Next stage" click needed for that
+// hop anymore. One "Next stage" click then does the ordinary Reveal→Revise
+// advance (Reveal is unconditionally complete, so Revise is already
+// mounted the instant Reveal is).
 export async function reachRevisedState(page: Page) {
   await reachLockInterstitial(page)
-  await page.getByRole("button", { name: "Next stage" }).click()
+  await page.getByTestId("lock-interstitial-content-commit").click()
+  await expect(page.locator('[data-blind-call-stage="reveal"]')).toHaveAttribute(
+    "data-active",
+    "true"
+  )
+  await waitForTrackSettled(page)
   await page.getByRole("button", { name: "Next stage" }).click()
   await expect(page.locator('[data-blind-call-stage="revise"]')).toHaveAttribute(
     "data-active",
